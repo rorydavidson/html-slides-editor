@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slides Editor</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1a2e;
+    --surface: #222240;
+    --surface-hover: #2a2a50;
+    --border: #333360;
+    --text: #e0e0f0;
+    --text-dim: #8888aa;
+    --accent: #6c63ff;
+    --accent-hover: #7b73ff;
+    --danger: #e74c3c;
+    --success: #2ecc71;
+    --warning: #f39c12;
+    --radius: 8px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top bar ── */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .toolbar h1 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+    margin-right: auto;
+  }
+  .toolbar .filename {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-right: auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar .filename.unsaved::after {
+    content: ' (unsaved)';
+    color: var(--warning);
+  }
+
+  button {
+    background: var(--surface-hover);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--radius);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--accent); border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); }
+  button.danger { color: var(--danger); }
+  button.danger:hover { background: var(--danger); color: white; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Main layout ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Slide sidebar ── */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 0.6rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .slide-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0.5rem;
+  }
+  .slide-thumb {
+    position: relative;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    overflow: hidden;
+    background: #000;
+    aspect-ratio: 16/9;
+    transition: border-color 0.15s;
+  }
+  .slide-thumb:hover { border-color: var(--border); }
+  .slide-thumb.active { border-color: var(--accent); }
+  .slide-thumb iframe {
+    width: 1280px;
+    height: 720px;
+    transform-origin: 0 0;
+    pointer-events: none;
+    border: none;
+  }
+  .slide-thumb .label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.75);
+    padding: 0.2rem 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+  .slide-thumb .slide-actions {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .slide-thumb:hover .slide-actions { opacity: 1; }
+  .slide-actions button {
+    padding: 2px 5px;
+    font-size: 0.65rem;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.7);
+    border: none;
+  }
+
+  /* ── Editor panel ── */
+  .editor-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .editor-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.2rem;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-dim);
+    gap: 1rem;
+  }
+  .empty-state p { font-size: 0.9rem; }
+
+  /* ── Editor fields ── */
+  .field-group {
+    margin-bottom: 1.2rem;
+  }
+  .field-group label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin-bottom: 0.35rem;
+  }
+  .field-group input,
+  .field-group textarea,
+  .field-group select {
+    width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.7rem;
+    font-size: 0.85rem;
+    font-family: inherit;
+    resize: vertical;
+  }
+  .field-group input:focus,
+  .field-group textarea:focus,
+  .field-group select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .field-group textarea { min-height: 60px; }
+
+  .item-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.8rem;
+    margin-bottom: 0.6rem;
+  }
+  .item-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim);
+  }
+
+  .section-header {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.6rem;
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Preview ── */
+  .preview-section {
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .preview-toggle {
+    padding: 0.4rem 1rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border: none;
+    background: var(--surface);
+    width: 100%;
+    text-align: left;
+  }
+  .preview-toggle:hover { color: var(--text); background: var(--surface); }
+  .preview-frame-wrap {
+    height: 300px;
+    background: #000;
+    overflow: hidden;
+    position: relative;
+  }
+  .preview-frame-wrap iframe {
+    width: 1280px;
+    height: 720px;
+    transform-origin: 0 0;
+    border: none;
+  }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    min-width: 400px;
+    max-width: 500px;
+  }
+  .modal h2 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+  }
+  .file-item {
+    padding: 0.6rem 0.8rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    transition: background 0.1s;
+  }
+  .file-item:hover { background: var(--surface-hover); }
+  .file-item .date { font-size: 0.7rem; color: var(--text-dim); }
+
+  /* ── File browser ── */
+  .browser-path {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .browser-path input {
+    flex: 1;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    font-family: monospace;
+    min-width: 200px;
+  }
+  .browser-path input:focus { outline: none; border-color: var(--accent); }
+  .dir-item {
+    padding: 0.45rem 0.8rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    transition: background 0.1s;
+    color: var(--text-dim);
+  }
+  .dir-item:hover { background: var(--surface-hover); color: var(--text); }
+  .dir-item .icon { font-size: 1rem; opacity: 0.7; }
+  .browser-section-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    padding: 0.6rem 0.4rem 0.2rem;
+  }
+  .browser-list {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: var(--success);
+    color: #fff;
+    padding: 0.6rem 1.2rem;
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s;
+    z-index: 2000;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: var(--danger); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Top toolbar -->
+<div class="toolbar">
+  <h1>Slides Editor</h1>
+  <span class="filename" id="filename">No file open</span>
+  <button onclick="openFileModal()">Open</button>
+  <button onclick="saveFile()" id="btnSave" disabled>Save</button>
+  <button onclick="saveAsFile()" id="btnSaveAs" disabled>Save As</button>
+  <button onclick="addSlide()" id="btnAdd" disabled>+ Slide</button>
+</div>
+
+<!-- Main layout -->
+<div class="main">
+  <!-- Sidebar: slide list -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>Slides</span>
+      <span id="slideCount"></span>
+    </div>
+    <div class="slide-list" id="slideList"></div>
+  </div>
+
+  <!-- Editor panel -->
+  <div class="editor-panel">
+    <div class="editor-scroll" id="editorScroll">
+      <div class="empty-state" id="emptyState">
+        <p>Open an HTML slides file to start editing</p>
+        <button class="primary" onclick="openFileModal()">Open File</button>
+      </div>
+      <div id="editorContent" style="display:none;"></div>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-section" id="previewSection" style="display:none;">
+      <button class="preview-toggle" onclick="togglePreview()">
+        Preview ▾
+      </button>
+      <div class="preview-frame-wrap" id="previewWrap">
+        <iframe id="previewFrame"></iframe>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Open file modal -->
+<div class="modal-overlay hidden" id="openModal">
+  <div class="modal" style="min-width:500px;max-width:600px;">
+    <h2>Open Slide Deck</h2>
+    <div class="browser-path">
+      <input type="text" id="browserPathInput" placeholder="/path/to/directory"
+             onkeydown="if(event.key==='Enter')browseTo(this.value)">
+      <button onclick="browseTo(document.getElementById('browserPathInput').value)">Go</button>
+    </div>
+    <div class="browser-list" id="browserList">Loading...</div>
+    <div style="margin-top:1rem; text-align:right;">
+      <button onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Save As modal -->
+<div class="modal-overlay hidden" id="saveAsModal">
+  <div class="modal">
+    <h2>Save As</h2>
+    <div class="field-group">
+      <label>Filename</label>
+      <input type="text" id="saveAsName" placeholder="my-slides.html">
+    </div>
+    <div style="margin-top:1rem; display:flex; gap:0.5rem; justify-content:flex-end;">
+      <button onclick="closeSaveAsModal()">Cancel</button>
+      <button class="primary" onclick="confirmSaveAs()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───
+let currentFile = null;
+let rawHtml = '';
+let headContent = '';
+let styleContent = '';
+let scriptContent = '';
+let slides = [];       // array of slide HTML strings (outer div included)
+let selectedSlide = -1;
+let dirty = false;
+
+// ─── API helpers ───
+async function api(method, url, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  return res.json();
+}
+
+function toast(msg, isError) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show' + (isError ? ' error' : '');
+  setTimeout(() => el.className = 'toast', 2500);
+}
+
+// ─── File operations ───
+let currentBrowserDir = '';
+
+async function openFileModal() {
+  document.getElementById('openModal').classList.remove('hidden');
+  // Start at the default slides directory
+  browseTo('');
+}
+
+async function browseTo(dir) {
+  const list = document.getElementById('browserList');
+  const pathInput = document.getElementById('browserPathInput');
+  list.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;padding:0.5rem;">Loading...</p>';
+
+  const url = dir ? `/api/browse?dir=${encodeURIComponent(dir)}` : '/api/browse';
+  const data = await api('GET', url);
+
+  if (data.error) {
+    list.innerHTML = `<p style="color:var(--danger);font-size:0.85rem;padding:0.5rem;">${escHtml(data.error)}</p>`;
+    return;
+  }
+
+  currentBrowserDir = data.dir;
+  pathInput.value = data.dir;
+
+  let html = '';
+
+  // Parent directory link
+  if (data.parent) {
+    html += `<div class="dir-item" onclick="browseTo('${escAttr(data.parent)}')">
+      <span class="icon">⬆</span> <span>..</span>
+    </div>`;
+  }
+
+  // Subdirectories
+  if (data.dirs.length) {
+    html += '<div class="browser-section-label">Folders</div>';
+    data.dirs.forEach(d => {
+      html += `<div class="dir-item" onclick="browseTo('${escAttr(d.path)}')">
+        <span class="icon">📁</span> <span>${escHtml(d.name)}</span>
+      </div>`;
+    });
+  }
+
+  // HTML files
+  if (data.files.length) {
+    html += '<div class="browser-section-label">HTML Files</div>';
+    data.files.forEach(f => {
+      html += `<div class="file-item" onclick="loadFile('${escAttr(f.path)}')">
+        <span>📄 ${escHtml(f.name)}</span>
+        <span class="date">${new Date(f.modified).toLocaleDateString()}</span>
+      </div>`;
+    });
+  }
+
+  if (!data.dirs.length && !data.files.length) {
+    html += '<p style="color:var(--text-dim);font-size:0.85rem;padding:0.5rem;">No folders or HTML files here.</p>';
+  }
+
+  list.innerHTML = html;
+}
+
+function closeModal() {
+  document.getElementById('openModal').classList.add('hidden');
+}
+
+async function loadFile(filePath) {
+  closeModal();
+  const data = await api('GET', `/api/file?path=${encodeURIComponent(filePath)}`);
+  if (data.error) { toast(data.error, true); return; }
+  currentFile = data.path;
+  rawHtml = data.content;
+  parseSlides(rawHtml);
+  dirty = false;
+  updateUI();
+}
+
+async function saveFile() {
+  if (!currentFile) return;
+  const html = reassemble();
+  const data = await api('POST', '/api/file', { path: currentFile, content: html });
+  if (data.error) { toast(data.error, true); return; }
+  rawHtml = html;
+  dirty = false;
+  updateFilename();
+  toast('Saved');
+}
+
+function saveAsFile() {
+  document.getElementById('saveAsModal').classList.remove('hidden');
+  document.getElementById('saveAsName').value = currentFile || 'slides.html';
+  document.getElementById('saveAsName').focus();
+}
+
+function closeSaveAsModal() {
+  document.getElementById('saveAsModal').classList.add('hidden');
+}
+
+async function confirmSaveAs() {
+  let name = document.getElementById('saveAsName').value.trim();
+  if (!name) return;
+  if (!name.endsWith('.html')) name += '.html';
+  // If it's just a filename (no slashes), save in the same directory as the current file
+  if (!name.includes('/') && currentFile) {
+    const dir = currentFile.substring(0, currentFile.lastIndexOf('/'));
+    name = dir + '/' + name;
+  }
+  currentFile = name;
+  closeSaveAsModal();
+  await saveFile();
+}
+
+// ─── Parsing ───
+function parseSlides(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Extract head content (title, meta, link tags)
+  const headEl = doc.querySelector('head');
+  headContent = '';
+  if (headEl) {
+    for (const child of headEl.children) {
+      if (child.tagName === 'STYLE') continue;
+      headContent += child.outerHTML + '\n';
+    }
+  }
+
+  // Extract style
+  const styleEl = doc.querySelector('style');
+  styleContent = styleEl ? styleEl.textContent : '';
+
+  // Extract script
+  const scriptEl = doc.querySelector('script');
+  scriptContent = scriptEl ? scriptEl.textContent : '';
+
+  // Extract slides
+  slides = [];
+  const deck = doc.querySelector('.deck');
+  if (deck) {
+    deck.querySelectorAll('.slide').forEach(s => {
+      slides.push(s.outerHTML);
+    });
+  }
+
+  // Also capture any elements between deck and script (progress bar, counter)
+  selectedSlide = slides.length > 0 ? 0 : -1;
+}
+
+function reassemble() {
+  let html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n';
+  html += headContent;
+  html += '<style>\n' + styleContent + '\n</style>\n';
+  html += '</head>\n<body>\n';
+  html += '<div class="deck" id="deck">\n\n';
+
+  slides.forEach((s, i) => {
+    // Update data-slide attribute and ensure first slide has active class
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(s, 'text/html');
+    const el = doc.querySelector('.slide');
+    if (el) {
+      el.setAttribute('data-slide', i);
+      if (i === 0) {
+        el.classList.add('active');
+      } else {
+        el.classList.remove('active');
+      }
+      html += el.outerHTML + '\n\n';
+    } else {
+      html += s + '\n\n';
+    }
+  });
+
+  html += '</div><!-- /deck -->\n\n';
+  html += '<div class="deck-progress" id="progress"></div>\n';
+  html += '<div class="counter" id="counter"></div>\n\n';
+  html += '<script>\n' + scriptContent + '\n<\/script>\n';
+  html += '</body>\n</html>';
+  return html;
+}
+
+// ─── UI ───
+function updateUI() {
+  updateFilename();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  document.getElementById('btnSave').disabled = !currentFile;
+  document.getElementById('btnSaveAs').disabled = slides.length === 0;
+  document.getElementById('btnAdd').disabled = slides.length === 0;
+}
+
+function updateFilename() {
+  const el = document.getElementById('filename');
+  if (currentFile) {
+    const name = currentFile.substring(currentFile.lastIndexOf('/') + 1);
+    el.textContent = name;
+    el.title = currentFile;
+  } else {
+    el.textContent = 'No file open';
+    el.title = '';
+  }
+  el.className = 'filename' + (dirty ? ' unsaved' : '');
+}
+
+function markDirty() {
+  dirty = true;
+  updateFilename();
+}
+
+// ─── Slide list (thumbnails) ───
+function renderSlideList() {
+  const list = document.getElementById('slideList');
+  document.getElementById('slideCount').textContent = slides.length ? `${slides.length}` : '';
+
+  if (!slides.length) {
+    list.innerHTML = '';
+    return;
+  }
+
+  list.innerHTML = slides.map((s, i) => {
+    const title = getSlideTitle(s, i);
+    return `
+      <div class="slide-thumb ${i === selectedSlide ? 'active' : ''}"
+           onclick="selectSlide(${i})" id="thumb-${i}">
+        <iframe id="thumbFrame-${i}" scrolling="no"></iframe>
+        <span class="label">${i + 1}. ${escHtml(title)}</span>
+        <div class="slide-actions">
+          ${i > 0 ? `<button onclick="event.stopPropagation();moveSlide(${i},-1)" title="Move up">&#9650;</button>` : ''}
+          ${i < slides.length - 1 ? `<button onclick="event.stopPropagation();moveSlide(${i},1)" title="Move down">&#9660;</button>` : ''}
+          <button onclick="event.stopPropagation();duplicateSlide(${i})" title="Duplicate">&#9851;</button>
+          <button class="danger" onclick="event.stopPropagation();deleteSlide(${i})" title="Delete">&#10005;</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Render thumbnails in iframes after DOM update
+  requestAnimationFrame(() => {
+    slides.forEach((s, i) => renderThumb(i));
+    fitThumbs();
+  });
+}
+
+function getSlideTitle(html, index) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const h1 = doc.querySelector('h1');
+  if (h1) return h1.textContent.trim();
+  const h2 = doc.querySelector('h2');
+  if (h2) return h2.textContent.trim();
+  const statement = doc.querySelector('.statement');
+  if (statement) return statement.textContent.trim().substring(0, 50) + '...';
+  return `Slide ${index + 1}`;
+}
+
+function renderThumb(i) {
+  const iframe = document.getElementById(`thumbFrame-${i}`);
+  if (!iframe) return;
+  const html = buildSlidePreviewHtml(i);
+  iframe.srcdoc = html;
+}
+
+function buildSlidePreviewHtml(i) {
+  const slideHtml = slides[i]
+    .replace(/class="slide([^"]*)"/, 'class="slide$1 active"');
+  return `<!DOCTYPE html><html><head>
+    <style>${styleContent}
+      body { margin: 0; overflow: hidden; }
+      .deck-progress, .counter { display: none; }
+      .slide { position: relative; opacity: 1; transform: none; pointer-events: none; }
+      .slide .anim { opacity: 1; transform: none; }
+    </style></head><body>
+    <div class="deck">${slideHtml}</div></body></html>`;
+}
+
+function fitThumbs() {
+  document.querySelectorAll('.slide-thumb').forEach(thumb => {
+    const iframe = thumb.querySelector('iframe');
+    if (!iframe) return;
+    const w = thumb.clientWidth;
+    const scale = w / 1280;
+    iframe.style.transform = `scale(${scale})`;
+    thumb.style.height = (720 * scale) + 'px';
+  });
+}
+window.addEventListener('resize', fitThumbs);
+
+function selectSlide(i) {
+  selectedSlide = i;
+  document.querySelectorAll('.slide-thumb').forEach((el, j) => {
+    el.classList.toggle('active', j === i);
+  });
+  renderEditor();
+  updatePreview();
+}
+
+function moveSlide(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= slides.length) return;
+  [slides[i], slides[j]] = [slides[j], slides[i]];
+  if (selectedSlide === i) selectedSlide = j;
+  else if (selectedSlide === j) selectedSlide = i;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function duplicateSlide(i) {
+  slides.splice(i + 1, 0, slides[i]);
+  selectedSlide = i + 1;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function deleteSlide(i) {
+  if (!confirm(`Delete slide ${i + 1}?`)) return;
+  slides.splice(i, 1);
+  if (selectedSlide >= slides.length) selectedSlide = slides.length - 1;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function addSlide() {
+  const newSlide = `<div class="slide" data-slide="${slides.length}">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow blue" style="width:500px;height:500px;top:-100px;right:5%;"></div>
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">New Slide</h2>
+  <p class="subtitle anim">Add your content here.</p>
+</div>`;
+  slides.push(newSlide);
+  selectedSlide = slides.length - 1;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  // Scroll to bottom of slide list
+  const list = document.getElementById('slideList');
+  list.scrollTop = list.scrollHeight;
+}
+
+// ─── Editor ───
+function renderEditor() {
+  const container = document.getElementById('editorContent');
+  const empty = document.getElementById('emptyState');
+
+  if (selectedSlide < 0 || !slides.length) {
+    container.style.display = 'none';
+    empty.style.display = currentFile ? 'none' : '';
+    return;
+  }
+
+  empty.style.display = 'none';
+  container.style.display = 'block';
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const slide = doc.querySelector('.slide');
+  if (!slide) { container.innerHTML = '<p>Could not parse slide</p>'; return; }
+
+  let html = `<h3 style="margin-bottom:1rem;">Slide ${selectedSlide + 1}</h3>`;
+
+  // Detect and render editable elements
+  const editables = findEditables(slide);
+
+  editables.forEach((ed, idx) => {
+    const id = `field-${idx}`;
+    if (ed.type === 'section') {
+      html += `<div class="section-header">${escHtml(ed.label)}</div>`;
+    } else if (ed.type === 'text') {
+      html += `<div class="field-group">
+        <label>${escHtml(ed.label)}</label>
+        <input type="text" id="${id}" value="${escAttr(ed.value)}"
+               onchange="updateField(${idx}, this.value)">
+      </div>`;
+    } else if (ed.type === 'textarea') {
+      html += `<div class="field-group">
+        <label>${escHtml(ed.label)}</label>
+        <textarea id="${id}" oninput="updateField(${idx}, this.value)">${escHtml(ed.value)}</textarea>
+      </div>`;
+    } else if (ed.type === 'richtext') {
+      html += `<div class="field-group">
+        <label>${escHtml(ed.label)} <span style="font-weight:400;color:var(--text-dim)">(HTML)</span></label>
+        <textarea id="${id}" oninput="updateField(${idx}, this.value)" style="min-height:80px;">${escHtml(ed.value)}</textarea>
+      </div>`;
+    } else if (ed.type === 'select') {
+      html += `<div class="field-group">
+        <label>${escHtml(ed.label)}</label>
+        <select id="${id}" onchange="updateField(${idx}, this.value)">
+          ${ed.options.map(o => `<option value="${escAttr(o)}" ${o === ed.value ? 'selected' : ''}>${escHtml(o)}</option>`).join('')}
+        </select>
+      </div>`;
+    } else if (ed.type === 'items') {
+      html += `<div class="section-header">${escHtml(ed.label)}</div>`;
+      ed.items.forEach((item, ii) => {
+        html += `<div class="item-card">
+          <div class="item-card-header">
+            <span>Item ${ii + 1}</span>
+            <button class="danger" onclick="removeItem(${idx}, ${ii})" style="padding:1px 6px;font-size:0.65rem;">Remove</button>
+          </div>`;
+        item.fields.forEach((f, fi) => {
+          const fid = `field-${idx}-${ii}-${fi}`;
+          if (f.multiline) {
+            html += `<div class="field-group">
+              <label>${escHtml(f.label)}</label>
+              <textarea id="${fid}" oninput="updateItemField(${idx}, ${ii}, ${fi}, this.value)">${escHtml(f.value)}</textarea>
+            </div>`;
+          } else {
+            html += `<div class="field-group">
+              <label>${escHtml(f.label)}</label>
+              <input type="text" id="${fid}" value="${escAttr(f.value)}"
+                     onchange="updateItemField(${idx}, ${ii}, ${fi}, this.value)">
+            </div>`;
+          }
+        });
+        html += '</div>';
+      });
+      html += `<button onclick="addItem(${idx})" style="margin-bottom:1rem;">+ Add Item</button>`;
+    }
+  });
+
+  // Raw HTML fallback
+  html += `<div class="section-header" style="margin-top:1.5rem;">Raw HTML</div>
+    <div class="field-group">
+      <label>Direct HTML editing</label>
+      <textarea id="rawSlideHtml" style="min-height:200px;font-family:monospace;font-size:0.75rem;"
+                oninput="updateRawHtml(this.value)">${escHtml(slides[selectedSlide])}</textarea>
+    </div>`;
+
+  container.innerHTML = html;
+
+  // Store editables for update callbacks
+  container._editables = editables;
+}
+
+function findEditables(slide) {
+  const eds = [];
+
+  // Kicker
+  const kicker = slide.querySelector('.kicker');
+  if (kicker) {
+    eds.push({ type: 'text', label: 'Kicker', selector: '.kicker', value: kicker.textContent.trim(),
+      apply: (el, val) => { el.textContent = val; } });
+    const kickerColor = ['blue','warm','green','purple'].find(c => kicker.classList.contains(c)) || 'blue';
+    eds.push({ type: 'select', label: 'Kicker Colour', selector: '.kicker', value: kickerColor,
+      options: ['blue', 'warm', 'green', 'purple'],
+      apply: (el, val) => { ['blue','warm','green','purple'].forEach(c => el.classList.remove(c)); el.classList.add(val); } });
+  }
+
+  // Year tag
+  const yearTag = slide.querySelector('.year-tag');
+  if (yearTag) {
+    const textNode = Array.from(yearTag.childNodes).find(n => n.nodeType === 3 || (n.nodeType === 1 && !n.classList.contains('dot')));
+    const tagText = yearTag.textContent.trim();
+    eds.push({ type: 'text', label: 'Year Tag', selector: '.year-tag', value: tagText,
+      apply: (el, val) => {
+        const dot = el.querySelector('.dot');
+        el.textContent = '';
+        if (dot) el.appendChild(dot);
+        el.appendChild(document.createTextNode(val));
+      }
+    });
+  }
+
+  // H1
+  const h1 = slide.querySelector('h1');
+  if (h1) {
+    eds.push({ type: 'text', label: 'Title (H1)', selector: 'h1', value: h1.textContent.trim(),
+      apply: (el, val) => { el.textContent = val; } });
+  }
+
+  // H2
+  const h2 = slide.querySelector('h2');
+  if (h2) {
+    eds.push({ type: 'text', label: 'Heading (H2)', selector: 'h2', value: h2.textContent.trim(),
+      apply: (el, val) => { el.textContent = val; } });
+  }
+
+  // Subtitle
+  const subtitle = slide.querySelector('.subtitle');
+  if (subtitle) {
+    eds.push({ type: 'textarea', label: 'Subtitle', selector: '.subtitle', value: subtitle.textContent.trim(),
+      apply: (el, val) => { el.textContent = val; } });
+  }
+
+  // Statement
+  const statements = slide.querySelectorAll('.statement');
+  statements.forEach((st, i) => {
+    eds.push({ type: 'richtext', label: `Statement ${statements.length > 1 ? i + 1 : ''}`, selector: `.statement:nth-of-type(${i + 1})`, value: st.innerHTML.trim(),
+      selectorIndex: i,
+      apply: (el, val) => { el.innerHTML = val; } });
+  });
+
+  // Title slide meta
+  const meta = slide.querySelector('.meta');
+  if (meta) {
+    eds.push({ type: 'text', label: 'Meta', selector: '.meta', value: meta.textContent.trim(),
+      apply: (el, val) => { el.textContent = val; } });
+  }
+
+  // Items (cards)
+  const itemsContainer = slide.querySelector('.items');
+  if (itemsContainer) {
+    const items = itemsContainer.querySelectorAll('.item');
+    const itemData = [];
+    items.forEach((item, ii) => {
+      const fields = [];
+      const tag = item.querySelector('.tag');
+      if (tag) {
+        fields.push({ label: 'Tag', value: tag.textContent.trim(), selector: '.tag', multiline: false });
+      }
+      const h3 = item.querySelector('h3');
+      if (h3) {
+        fields.push({ label: 'Title', value: h3.textContent.trim(), selector: 'h3', multiline: false });
+      }
+      const p = item.querySelector('p');
+      if (p) {
+        fields.push({ label: 'Description', value: p.textContent.trim(), selector: 'p', multiline: true });
+      }
+      itemData.push({ fields });
+    });
+    eds.push({ type: 'items', label: 'Cards', containerSelector: '.items', items: itemData });
+  }
+
+  // Timeline phases
+  const timeline = slide.querySelector('.timeline');
+  if (timeline) {
+    const phases = timeline.querySelectorAll('.timeline-phase');
+    phases.forEach((phase, pi) => {
+      eds.push({ type: 'section', label: `Timeline Phase ${pi + 1}` });
+      const yLabel = phase.querySelector('.y-label');
+      if (yLabel) {
+        eds.push({ type: 'text', label: 'Phase Label', selector: `.timeline-phase:nth-child(${pi + 1}) .y-label`, value: yLabel.textContent.trim(),
+          phaseIndex: pi,
+          apply: (el, val) => { el.textContent = val; } });
+      }
+      const h3 = phase.querySelector('h3');
+      if (h3) {
+        eds.push({ type: 'text', label: 'Phase Title', selector: `.timeline-phase:nth-child(${pi + 1}) h3`, value: h3.textContent.trim(),
+          phaseIndex: pi,
+          apply: (el, val) => { el.textContent = val; } });
+      }
+      const p = phase.querySelector(':scope > p:not(.y-label)');
+      if (p) {
+        eds.push({ type: 'textarea', label: 'Phase Description', selector: `.timeline-phase:nth-child(${pi + 1}) > p:not(.y-label)`, value: p.textContent.trim(),
+          phaseIndex: pi,
+          apply: (el, val) => { el.textContent = val; } });
+      }
+      const lis = phase.querySelectorAll('ul li');
+      if (lis.length) {
+        const listText = Array.from(lis).map(li => li.textContent.trim()).join('\n');
+        eds.push({ type: 'textarea', label: 'List Items (one per line)', value: listText,
+          phaseIndex: pi, isList: true,
+          apply: null });
+      }
+    });
+  }
+
+  // Stats
+  const stats = slide.querySelectorAll('.stat');
+  if (stats.length) {
+    eds.push({ type: 'section', label: 'Statistics' });
+    stats.forEach((stat, si) => {
+      const num = stat.querySelector('.stat-num');
+      const label = stat.querySelector('.stat-label');
+      if (num) eds.push({ type: 'text', label: `Stat ${si + 1} Value`, value: num.textContent.trim(), statIndex: si, statPart: 'num' });
+      if (label) eds.push({ type: 'text', label: `Stat ${si + 1} Label`, value: label.textContent.trim(), statIndex: si, statPart: 'label' });
+    });
+  }
+
+  // Highlight box
+  const highlight = slide.querySelector('.highlight');
+  if (highlight) {
+    eds.push({ type: 'richtext', label: 'Highlight Box', selector: '.highlight', value: highlight.innerHTML.trim(),
+      apply: (el, val) => { el.innerHTML = val; } });
+  }
+
+  return eds;
+}
+
+function updateField(idx, value) {
+  const container = document.getElementById('editorContent');
+  const editables = container._editables;
+  if (!editables || !editables[idx]) return;
+
+  const ed = editables[idx];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const slide = doc.querySelector('.slide');
+  if (!slide) return;
+
+  // Apply the change based on type
+  if (ed.selector && ed.apply) {
+    let el;
+    if (ed.selectorIndex !== undefined) {
+      el = slide.querySelectorAll('.statement')[ed.selectorIndex];
+    } else {
+      el = slide.querySelector(ed.selector);
+    }
+    if (el) ed.apply(el, value);
+  } else if (ed.isList) {
+    const phases = slide.querySelectorAll('.timeline-phase');
+    const phase = phases[ed.phaseIndex];
+    if (phase) {
+      const ul = phase.querySelector('ul');
+      if (ul) {
+        ul.innerHTML = value.split('\n').filter(l => l.trim())
+          .map(l => `<li>${l.trim()}</li>`).join('');
+      }
+    }
+  } else if (ed.statIndex !== undefined) {
+    const stats = slide.querySelectorAll('.stat');
+    const stat = stats[ed.statIndex];
+    if (stat) {
+      const target = stat.querySelector(ed.statPart === 'num' ? '.stat-num' : '.stat-label');
+      if (target) target.textContent = value;
+    }
+  }
+
+  slides[selectedSlide] = slide.outerHTML;
+  markDirty();
+  renderThumb(selectedSlide);
+  updatePreview();
+}
+
+function updateItemField(edIdx, itemIdx, fieldIdx, value) {
+  const container = document.getElementById('editorContent');
+  const editables = container._editables;
+  if (!editables || !editables[edIdx]) return;
+
+  const ed = editables[edIdx];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const slide = doc.querySelector('.slide');
+  if (!slide) return;
+
+  const itemsEl = slide.querySelector(ed.containerSelector);
+  if (!itemsEl) return;
+  const items = itemsEl.querySelectorAll('.item');
+  const item = items[itemIdx];
+  if (!item) return;
+
+  const fieldDef = ed.items[itemIdx].fields[fieldIdx];
+  const target = item.querySelector(fieldDef.selector);
+  if (target) target.textContent = value;
+
+  slides[selectedSlide] = slide.outerHTML;
+  markDirty();
+  renderThumb(selectedSlide);
+  updatePreview();
+}
+
+function removeItem(edIdx, itemIdx) {
+  const container = document.getElementById('editorContent');
+  const editables = container._editables;
+  if (!editables || !editables[edIdx]) return;
+
+  const ed = editables[edIdx];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const slide = doc.querySelector('.slide');
+  if (!slide) return;
+
+  const itemsEl = slide.querySelector(ed.containerSelector);
+  if (!itemsEl) return;
+  const items = itemsEl.querySelectorAll('.item');
+  if (items[itemIdx]) items[itemIdx].remove();
+
+  slides[selectedSlide] = slide.outerHTML;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function addItem(edIdx) {
+  const container = document.getElementById('editorContent');
+  const editables = container._editables;
+  if (!editables || !editables[edIdx]) return;
+
+  const ed = editables[edIdx];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const slide = doc.querySelector('.slide');
+  if (!slide) return;
+
+  const itemsEl = slide.querySelector(ed.containerSelector);
+  if (!itemsEl) return;
+
+  const newItem = doc.createElement('div');
+  newItem.className = 'item';
+  newItem.innerHTML = '<h3>New Item</h3><p>Description here.</p>';
+  itemsEl.appendChild(newItem);
+
+  slides[selectedSlide] = slide.outerHTML;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function updateRawHtml(value) {
+  slides[selectedSlide] = value;
+  markDirty();
+  renderThumb(selectedSlide);
+  updatePreview();
+}
+
+// ─── Preview ───
+function updatePreview() {
+  if (selectedSlide < 0 || !slides.length) return;
+  const section = document.getElementById('previewSection');
+  section.style.display = 'block';
+  const iframe = document.getElementById('previewFrame');
+  iframe.srcdoc = buildSlidePreviewHtml(selectedSlide);
+  fitPreview();
+}
+
+function fitPreview() {
+  const wrap = document.getElementById('previewWrap');
+  const iframe = document.getElementById('previewFrame');
+  if (!wrap || !iframe) return;
+  const w = wrap.clientWidth;
+  const scale = w / 1280;
+  iframe.style.transform = `scale(${scale})`;
+  wrap.style.height = (720 * scale) + 'px';
+}
+
+let previewVisible = true;
+function togglePreview() {
+  previewVisible = !previewVisible;
+  document.getElementById('previewWrap').style.display = previewVisible ? 'block' : 'none';
+  document.querySelector('.preview-toggle').textContent = previewVisible ? 'Preview ▾' : 'Preview ▸';
+  if (previewVisible) fitPreview();
+}
+
+window.addEventListener('resize', fitPreview);
+
+// ─── Helpers ───
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ─── Keyboard shortcuts ───
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    saveFile();
+  }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+    e.preventDefault();
+    openFileModal();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Technology & AI — Vienna GA 2026 — SNOMED International</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0c1520;
+    --surface: #132030;
+    --surface-light: #1a2940;
+    --surface-mid: #162436;
+    --text: #e8edf2;
+    --text-dim: #8ba0b8;
+    --text-dimmer: #5a7490;
+    --snomed-blue: #3bb0d6;
+    --snomed-blue-glow: rgba(59,176,214,0.12);
+    --accent: #3bb0d6;
+    --accent-warm: #f0944e;
+    --accent-warm-glow: rgba(240,148,78,0.12);
+    --accent-green: #5cd9a0;
+    --accent-green-glow: rgba(92,217,160,0.12);
+    --accent-purple: #a78bfa;
+    --accent-purple-glow: rgba(167,139,250,0.12);
+    --slide-max: 1100px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  .deck { position: relative; width: 100%; height: 100%; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 5vh 7vw;
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.55s ease, transform 0.55s ease;
+    pointer-events: none; overflow: hidden;
+  }
+  .slide.active {
+    opacity: 1; transform: translateY(0); pointer-events: auto;
+  }
+  .slide .anim {
+    opacity: 0; transform: translateY(16px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .slide.active .anim { opacity: 1; transform: translateY(0); }
+  .slide.active .anim:nth-child(1) { transition-delay: 0.08s; }
+  .slide.active .anim:nth-child(2) { transition-delay: 0.16s; }
+  .slide.active .anim:nth-child(3) { transition-delay: 0.24s; }
+  .slide.active .anim:nth-child(4) { transition-delay: 0.32s; }
+  .slide.active .anim:nth-child(5) { transition-delay: 0.40s; }
+  .slide.active .anim:nth-child(6) { transition-delay: 0.48s; }
+  .slide.active .anim:nth-child(7) { transition-delay: 0.56s; }
+  .slide.active .anim:nth-child(8) { transition-delay: 0.64s; }
+
+  /* ── Persistent logo ── */
+  .slide-logo {
+    position: absolute; top: 1.8rem; right: 2.2rem;
+    width: 40px; height: 40px; opacity: 0.3; z-index: 10;
+  }
+
+  /* ── Decorative ── */
+  .bg-glow {
+    position: absolute; border-radius: 50%; filter: blur(120px);
+    pointer-events: none; z-index: 0;
+  }
+  .bg-glow.blue  { background: rgba(59,176,214,0.08); }
+  .bg-glow.warm  { background: rgba(240,148,78,0.07); }
+  .bg-glow.green { background: rgba(92,217,160,0.07); }
+  .bg-glow.purple{ background: rgba(167,139,250,0.07); }
+  .dot-grid {
+    position: absolute; inset: 0; z-index: 0;
+    background-image: radial-gradient(rgba(59,176,214,0.055) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none;
+  }
+
+  /* ── Typography ── */
+  h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; margin-bottom: 0.8rem; position: relative; z-index: 1; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.6rem); font-weight: 700; line-height: 1.2; letter-spacing: -0.02em; margin-bottom: 0.8rem; position: relative; z-index: 1; }
+  .subtitle { font-size: clamp(0.95rem, 1.6vw, 1.25rem); font-weight: 300; color: var(--text-dim); line-height: 1.65; max-width: 700px; position: relative; z-index: 1; }
+  .kicker { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.9rem; display: flex; align-items: center; gap: 0.6rem; position: relative; z-index: 1; }
+  .kicker::before { content: ''; display: inline-block; width: 22px; height: 2px; border-radius: 1px; }
+  .kicker.blue   { color: var(--accent); }         .kicker.blue::before   { background: var(--accent); }
+  .kicker.warm   { color: var(--accent-warm); }    .kicker.warm::before   { background: var(--accent-warm); }
+  .kicker.green  { color: var(--accent-green); }   .kicker.green::before  { background: var(--accent-green); }
+  .kicker.purple { color: var(--accent-purple); }  .kicker.purple::before { background: var(--accent-purple); }
+
+  /* ── Cards ── */
+  .items {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.2rem; margin-top: 1.5rem;
+    max-width: var(--slide-max); position: relative; z-index: 1;
+  }
+  .items.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .items.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .item {
+    background: var(--surface); border-radius: 14px; padding: 1.3rem 1.4rem;
+    border: 1px solid rgba(59,176,214,0.1); transition: border-color 0.3s;
+  }
+  .item:hover { border-color: rgba(59,176,214,0.28); }
+  .item.warm  { border-color: rgba(240,148,78,0.1); }  .item.warm:hover  { border-color: rgba(240,148,78,0.28); }
+  .item.green { border-color: rgba(92,217,160,0.1); }  .item.green:hover { border-color: rgba(92,217,160,0.28); }
+  .item.purple{ border-color: rgba(167,139,250,0.1); } .item.purple:hover{ border-color: rgba(167,139,250,0.28); }
+  .item h3 { font-size: 0.95rem; font-weight: 600; margin-bottom: 0.45rem; }
+  .item p  { font-size: 0.82rem; color: var(--text-dim); line-height: 1.55; }
+  .item .tag { display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 0.2rem 0.6rem; border-radius: 4px; margin-bottom: 0.6rem; }
+  .item .tag.live    { background: rgba(92,217,160,0.15); color: var(--accent-green); }
+  .item .tag.active  { background: rgba(240,148,78,0.15); color: var(--accent-warm); }
+  .item .tag.planned { background: rgba(59,176,214,0.1); color: var(--accent); }
+
+  /* ── Icon circles ── */
+  .icon-circle { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem; flex-shrink: 0; }
+  .icon-circle.blue   { background: var(--snomed-blue-glow); color: var(--accent); }
+  .icon-circle.warm   { background: var(--accent-warm-glow); color: var(--accent-warm); }
+  .icon-circle.green  { background: var(--accent-green-glow); color: var(--accent-green); }
+  .icon-circle.purple { background: var(--accent-purple-glow); color: var(--accent-purple); }
+  .icon-circle svg { width: 20px; height: 20px; }
+
+  /* ── Statement ── */
+  .statement { font-size: clamp(1.5rem, 3.2vw, 2.7rem); font-weight: 400; line-height: 1.45; max-width: 840px; color: var(--text); position: relative; z-index: 1; }
+  .statement em { font-style: normal; color: var(--accent); font-weight: 500; }
+  .statement em.warm { color: var(--accent-warm); }
+  .statement em.green { color: var(--accent-green); }
+
+  /* ── Year tag ── */
+  .year-tag { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--surface); border-radius: 8px; padding: 0.32rem 0.85rem; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.06em; margin-bottom: 0.9rem; position: relative; z-index: 1; }
+  .year-tag .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .year-tag.blue   { color: var(--accent); border: 1px solid rgba(59,176,214,0.22); }         .year-tag.blue .dot   { background: var(--accent); }
+  .year-tag.warm   { color: var(--accent-warm); border: 1px solid rgba(240,148,78,0.22); }     .year-tag.warm .dot   { background: var(--accent-warm); }
+  .year-tag.green  { color: var(--accent-green); border: 1px solid rgba(92,217,160,0.22); }    .year-tag.green .dot  { background: var(--accent-green); }
+  .year-tag.purple { color: var(--accent-purple); border: 1px solid rgba(167,139,250,0.22); }  .year-tag.purple .dot { background: var(--accent-purple); }
+
+  /* ── Timeline ── */
+  .timeline { display: flex; align-items: stretch; margin-top: 2rem; max-width: var(--slide-max); position: relative; z-index: 1; }
+  .timeline-phase { flex: 1; padding: 1.8rem 1.5rem 1.5rem; background: var(--surface); border-top: 3px solid transparent; }
+  .timeline-phase:first-child { border-radius: 14px 0 0 14px; }
+  .timeline-phase:last-child  { border-radius: 0 14px 14px 0; }
+  .timeline-phase:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.04); }
+  .timeline-phase.y1 { border-top-color: var(--accent); }
+  .timeline-phase.y2 { border-top-color: var(--accent-warm); }
+  .timeline-phase.y3 { border-top-color: var(--accent-green); }
+  .timeline-phase .y-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 0.45rem; }
+  .timeline-phase.y1 .y-label { color: var(--accent); }
+  .timeline-phase.y2 .y-label { color: var(--accent-warm); }
+  .timeline-phase.y3 .y-label { color: var(--accent-green); }
+  .timeline-phase h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .timeline-phase p  { font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
+  .timeline-phase ul { margin-top: 0.6rem; padding-left: 0; list-style: none; }
+  .timeline-phase ul li { font-size: 0.78rem; color: var(--text-dim); line-height: 1.4; padding: 0.22rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); display: flex; align-items: baseline; gap: 0.5rem; }
+  .timeline-phase ul li::before { content: '›'; opacity: 0.4; flex-shrink: 0; }
+  .timeline-arrow { position: absolute; right: -11px; top: 50%; transform: translateY(-50%); z-index: 2; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-light); display: flex; align-items: center; justify-content: center; }
+  .timeline-arrow svg { width: 11px; height: 11px; color: var(--text-dim); }
+
+  /* ── Stat row / grid ── */
+  .stat-row { display: flex; gap: 2rem; margin-top: 1.8rem; position: relative; z-index: 1; flex-wrap: wrap; }
+  .stat { text-align: left; }
+  .stat-num { font-size: 2.4rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; background: linear-gradient(135deg, var(--accent), #68d4f0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-num.warm   { background: linear-gradient(135deg, var(--accent-warm), #ffc07a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-num.green  { background: linear-gradient(135deg, var(--accent-green), #a0f0cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-num.purple { background: linear-gradient(135deg, var(--accent-purple), #d0bbff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-label { font-size: 0.74rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.25rem; font-weight: 500; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: rgba(255,255,255,0.04); border-radius: 14px; overflow: hidden; margin-top: 1.8rem; max-width: var(--slide-max); position: relative; z-index: 1; }
+  .stat-grid-item { background: var(--surface); padding: 1.4rem 1.5rem; }
+  .stat-grid-item .num { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin-bottom: 0.3rem; }
+  .stat-grid-item .lbl { font-size: 0.78rem; color: var(--text-dim); line-height: 1.4; }
+
+  /* ── Two-column layout ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; align-items: center; margin-top: 1.5rem; max-width: var(--slide-max); position: relative; z-index: 1; }
+  .two-col.ratio-6-4 { grid-template-columns: 3fr 2fr; }
+  .two-col.ratio-4-6 { grid-template-columns: 2fr 3fr; }
+
+  /* ── Highlight box ── */
+  .highlight { background: var(--surface); border-radius: 14px; padding: 1.4rem 1.8rem; border-left: 3px solid var(--accent); margin-top: 1.5rem; max-width: 760px; position: relative; z-index: 1; }
+  .highlight.warm   { border-left-color: var(--accent-warm); }
+  .highlight.green  { border-left-color: var(--accent-green); }
+  .highlight p { font-size: 0.92rem; color: var(--text-dim); line-height: 1.65; }
+  .highlight strong { color: var(--text); font-weight: 600; }
+
+  /* ── Open badge ── */
+  .open-badge { display: inline-flex; align-items: center; gap: 0.7rem; background: rgba(92,217,160,0.1); border: 1px solid rgba(92,217,160,0.25); border-radius: 10px; padding: 0.6rem 1.1rem; font-size: 0.85rem; font-weight: 600; color: var(--accent-green); margin-top: 1.2rem; position: relative; z-index: 1; }
+  .open-badge svg { width: 18px; height: 18px; }
+
+  /* ── Visual panels for illustration ── */
+  .vis-panel { background: var(--surface); border-radius: 16px; padding: 1.5rem; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.05); min-height: 220px; }
+
+  /* ── Benchmark podium ── */
+  .podium { display: flex; align-items: flex-end; justify-content: center; gap: 0.6rem; padding: 1rem 0; }
+  .podium-bar { border-radius: 6px 6px 0 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 0.6rem 0.5rem; min-width: 70px; }
+  .podium-bar .place { font-size: 1.1rem; font-weight: 800; margin-bottom: 0.3rem; }
+  .podium-bar .team  { font-size: 0.68rem; font-weight: 600; opacity: 0.8; text-align: center; }
+  .podium-bar .score { font-size: 0.72rem; opacity: 0.6; margin-top: 0.2rem; }
+  .podium-bar.first  { background: linear-gradient(180deg, rgba(240,148,78,0.25), rgba(240,148,78,0.1)); border: 1px solid rgba(240,148,78,0.3); height: 130px; color: var(--accent-warm); }
+  .podium-bar.second { background: linear-gradient(180deg, rgba(59,176,214,0.2), rgba(59,176,214,0.08)); border: 1px solid rgba(59,176,214,0.25); height: 100px; color: var(--accent); }
+  .podium-bar.third  { background: linear-gradient(180deg, rgba(167,139,250,0.2), rgba(167,139,250,0.08)); border: 1px solid rgba(167,139,250,0.25); height: 80px; color: var(--accent-purple); }
+
+  /* ── Workflow diagram ── */
+  .workflow { display: flex; align-items: center; gap: 0; margin-top: 1.8rem; max-width: var(--slide-max); position: relative; z-index: 1; }
+  .wf-step { flex: 1; background: var(--surface); padding: 1.2rem 1rem; text-align: center; position: relative; }
+  .wf-step:first-child { border-radius: 12px 0 0 12px; }
+  .wf-step:last-child  { border-radius: 0 12px 12px 0; }
+  .wf-step:not(:last-child) { border-right: 1px solid rgba(255,255,255,0.04); }
+  .wf-step .wf-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.6rem; }
+  .wf-step h4 { font-size: 0.82rem; font-weight: 600; margin-bottom: 0.3rem; }
+  .wf-step p  { font-size: 0.73rem; color: var(--text-dim); line-height: 1.45; }
+  .wf-arrow { width: 24px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: var(--text-dimmer); font-size: 1.1rem; }
+
+  /* ── Language pills ── */
+  .lang-pills { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+  .lang-pill { background: var(--surface); border: 1px solid rgba(255,255,255,0.07); border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.75rem; color: var(--text-dim); font-weight: 500; }
+  .lang-pill.active { background: rgba(92,217,160,0.1); border-color: rgba(92,217,160,0.3); color: var(--accent-green); }
+  .lang-pill.next   { background: rgba(240,148,78,0.1);  border-color: rgba(240,148,78,0.3);  color: var(--accent-warm); }
+
+  /* ── Managed service dots ── */
+  .ms-dots { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
+  .ms-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); opacity: 0.7; }
+  .ms-dot.dim { background: var(--text-dimmer); opacity: 0.3; }
+
+  /* ── Progress bar ── */
+  .progress-bar-wrap { margin-top: 0.6rem; }
+  .progress-bar-wrap .bar-label { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.3rem; }
+  .progress-bar-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .progress-bar-fill  { height: 100%; border-radius: 2px; }
+  .progress-bar-fill.warm   { background: linear-gradient(90deg, var(--accent-warm), rgba(240,148,78,0.5)); }
+  .progress-bar-fill.blue   { background: linear-gradient(90deg, var(--accent), rgba(59,176,214,0.5)); }
+  .progress-bar-fill.green  { background: linear-gradient(90deg, var(--accent-green), rgba(92,217,160,0.5)); }
+
+  /* ── Title slide ── */
+  .slide.title-slide { justify-content: center; align-items: flex-start; background: linear-gradient(160deg, #080e18 0%, #0c1a2e 40%, #102538 100%); }
+  .title-logo { width: 120px; height: auto; margin-bottom: 2.2rem; filter: drop-shadow(0 4px 24px rgba(59,176,214,0.25)); position: relative; z-index: 1; }
+  .title-slide h1 { color: #fff; }
+  .title-divider { width: 72px; height: 3px; background: linear-gradient(90deg, var(--snomed-blue), rgba(59,176,214,0.2)); border-radius: 2px; margin: 0.9rem 0; position: relative; z-index: 1; }
+  .title-slide .meta { font-size: 0.85rem; color: var(--text-dim); margin-top: 1.2rem; position: relative; z-index: 1; }
+
+  /* ── Close slide ── */
+  .slide.close-slide { justify-content: center; align-items: flex-start; background: linear-gradient(160deg, #080e18 0%, #0c1a2e 40%, #102538 100%); }
+  .close-logo { width: 90px; height: auto; margin-top: 2.5rem; opacity: 0.4; position: relative; z-index: 1; }
+
+  /* ── Progress / counter ── */
+  .deck-progress { position: fixed; bottom: 0; left: 0; height: 2px; background: linear-gradient(90deg, var(--snomed-blue), var(--accent-warm)); transition: width 0.4s ease; z-index: 100; }
+  .counter { position: fixed; bottom: 1.4rem; right: 1.8rem; font-size: 0.72rem; color: var(--text-dim); font-variant-numeric: tabular-nums; z-index: 100; opacity: 0.5; }
+
+  @media (max-width: 768px) {
+    .items, .items.cols-3, .items.cols-4 { grid-template-columns: 1fr; }
+    .timeline { flex-direction: column; }
+    .two-col, .two-col.ratio-6-4, .two-col.ratio-4-6 { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .workflow { flex-direction: column; }
+    .slide { padding: 3.5vh 5vw; }
+    .title-logo { width: 80px; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 1 — Title
+══════════════════════════════════════════════════════ -->
+<div class="slide title-slide active" data-slide="0">
+  <div class="bg-glow blue" style="width:700px;height:700px;top:-250px;right:-150px;"></div>
+  <div class="bg-glow blue" style="width:400px;height:400px;bottom:-180px;left:-80px;"></div>
+  <div class="dot-grid"></div>
+  <img class="title-logo anim" src="snomed-logo.png" alt="SNOMED International">
+  <h1 class="anim">Technology &amp; AI</h1>
+  <div class="title-divider anim"></div>
+  <p class="subtitle anim">A three-year roadmap delivering foundations, platform capability, and an AI portfolio that is already producing real outcomes.</p>
+  <p class="meta anim">Rory Davidson · Chief Digital Information Officer · Vienna GA · April 2026</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 2 — The Bet
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="1">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow blue" style="width:550px;height:550px;top:5%;right:0%;"></div>
+  <p class="statement anim">Three years ago, we chose to front-load the unglamorous work — <em>stabilising infrastructure, modernising tooling, removing dependencies</em> — before building on top.</p>
+  <p class="statement anim" style="margin-top:1.4rem;">The reasoning was straightforward: <em class="warm">you cannot build confidently on foundations you cannot trust.</em></p>
+  <p class="statement anim" style="margin-top:1.4rem; font-size: clamp(1.1rem, 2vw, 1.8rem); color: var(--text-dim);">That bet is paying off.</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 3 — Roadmap Overview
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="2">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow blue" style="width:400px;height:400px;bottom:-100px;left:20%;"></div>
+  <p class="kicker blue anim">Technology Roadmap</p>
+  <h2 class="anim">Three years, three phases</h2>
+  <div class="timeline anim">
+    <div class="timeline-phase y1">
+      <p class="y-label">Year 1 · 2025 · Complete</p>
+      <h3>Foundations</h3>
+      <p style="margin-bottom:0.8rem;">Remove the constraints. Stabilise the platform. Shift to self-service.</p>
+      <ul>
+        <li>Account Dashboard</li>
+        <li>Platform stability</li>
+        <li>Jira dependency removed</li>
+        <li>Self-service identity</li>
+        <li>GPS — open release</li>
+      </ul>
+      <div class="timeline-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+    <div class="timeline-phase y2">
+      <p class="y-label">Year 2 · 2026 · In Progress</p>
+      <h3>The Platform</h3>
+      <p style="margin-bottom:0.8rem;">Build the integrated, capable tooling suite where the ecosystem runs.</p>
+      <ul>
+        <li>Authoring tool renewal</li>
+        <li>User-driven releases</li>
+        <li>Translation tooling</li>
+        <li>Browser refresh</li>
+        <li>Package Manager</li>
+      </ul>
+      <div class="timeline-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+    <div class="timeline-phase y3">
+      <p class="y-label">Year 3 · 2027 · Planned</p>
+      <h3>What Unlocks</h3>
+      <p style="margin-bottom:0.8rem;">Bigger initiatives become feasible once the platform foundations hold.</p>
+      <ul>
+        <li>Integrated Mapping Tool</li>
+        <li>CRS redesign</li>
+        <li>Extension Marketplace</li>
+        <li>Path to 2030</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 4 — Year 1: Groundwork
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="3">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow blue" style="width:450px;height:450px;top:-100px;right:5%;"></div>
+  <span class="year-tag blue anim"><span class="dot"></span>Year 1 · 2025 · Delivered</span>
+  <h2 class="anim">Laying the groundwork</h2>
+  <div class="items cols-4 anim">
+    <div class="item">
+      <div class="icon-circle blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18M3 9h18"/></svg>
+      </div>
+      <h3>Account Dashboard</h3>
+      <p>A unified front door giving members a single location for account, tools, licences and platform status. Previously scattered across three separate systems.</p>
+    </div>
+    <div class="item">
+      <div class="icon-circle blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+      </div>
+      <h3>Platform Stability</h3>
+      <p>The production infrastructure was showing strain under a growing user base. Targeted profiling, caching and infrastructure hardening delivered the reliable baseline Year 2 needed.</p>
+    </div>
+    <div class="item">
+      <div class="icon-circle blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      </div>
+      <h3>Jira Dependency Removed</h3>
+      <p>Removed a significant licensing lock-in and opened the door to flexible, integrated workflow tooling built around SNOMED International's own systems — not a third party's.</p>
+    </div>
+    <div class="item">
+      <div class="icon-circle blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <h3>Self-Service Identity</h3>
+      <p>User profile administration moved out of Confluence and into users' own hands. An early but important step toward a model where members do more for themselves without staff intervention.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 5 — GPS: The Open Release
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="4">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow green" style="width:500px;height:500px;bottom:-150px;right:0%;"></div>
+  <span class="year-tag green anim"><span class="dot"></span>Year 1 · 2025 · Milestone</span>
+  <div class="two-col ratio-6-4 anim">
+    <div>
+      <h2>The Global Patient Set — SNOMED CT's first open release</h2>
+      <p class="subtitle" style="margin-top:0.8rem;">A curated, clinically meaningful subset of SNOMED CT covering the conditions that matter most in everyday healthcare — freely available to anyone, no licence required.</p>
+      <div class="open-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        CC BY 4.0 — No licence. No login. Just download and use.
+      </div>
+      <div class="highlight green" style="margin-top:1.2rem;">
+        <p>For AI researchers and data scientists, the GPS removes the main practical barrier to working with SNOMED CT. You no longer need to be an NRC member, or navigate a licence agreement, to build on the world's leading clinical terminology. <strong>The GPS makes SNOMED CT accessible to the full AI research community.</strong></p>
+      </div>
+    </div>
+    <div class="vis-panel" style="flex-direction:column; gap:1rem; border-color: rgba(92,217,160,0.15);">
+      <!-- Open data SVG illustration -->
+      <svg viewBox="0 0 180 160" width="180" height="160" xmlns="http://www.w3.org/2000/svg">
+        <!-- Shield outline -->
+        <path d="M90 15 L145 38 L145 90 C145 125 90 148 90 148 C90 148 35 125 35 90 L35 38 Z" fill="rgba(92,217,160,0.08)" stroke="rgba(92,217,160,0.35)" stroke-width="1.5"/>
+        <!-- Open lock body -->
+        <rect x="72" y="85" width="36" height="28" rx="4" fill="rgba(92,217,160,0.2)" stroke="rgba(92,217,160,0.6)" stroke-width="1.5"/>
+        <!-- Open shackle (open = tilted right) -->
+        <path d="M80 85 L80 72 Q80 60 90 60 Q100 60 100 72" fill="none" stroke="rgba(92,217,160,0.6)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+        <path d="M100 72 L104 68" fill="none" stroke="rgba(92,217,160,0.6)" stroke-width="2.5" stroke-linecap="round" opacity="0.4"/>
+        <!-- Key hole -->
+        <circle cx="90" cy="97" r="4" fill="rgba(92,217,160,0.5)"/>
+        <rect x="88" y="97" width="4" height="8" rx="1" fill="rgba(92,217,160,0.5)"/>
+        <!-- CC text -->
+        <text x="90" y="135" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="700" fill="rgba(92,217,160,0.7)" letter-spacing="1">CC BY 4.0</text>
+        <!-- Radiating dots -->
+        <circle cx="40" cy="50" r="3" fill="rgba(92,217,160,0.3)"/>
+        <circle cx="28" cy="75" r="2" fill="rgba(92,217,160,0.2)"/>
+        <circle cx="140" cy="55" r="3" fill="rgba(92,217,160,0.3)"/>
+        <circle cx="152" cy="80" r="2" fill="rgba(92,217,160,0.2)"/>
+        <circle cx="60" cy="30" r="2" fill="rgba(92,217,160,0.2)"/>
+        <circle cx="120" cy="28" r="2.5" fill="rgba(92,217,160,0.25)"/>
+      </svg>
+      <div style="text-align:center;">
+        <div style="font-size:1.6rem;font-weight:800;color:var(--accent-green);letter-spacing:-0.02em;">Free &amp; Open</div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.3rem;">No licence. No barrier. No login.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 6 — Year 2: Platform
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="5">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:500px;height:500px;bottom:-150px;right:0;"></div>
+  <span class="year-tag warm anim"><span class="dot"></span>Year 2 · 2026 · In Progress</span>
+  <h2 class="anim">Building the platform</h2>
+  <div class="items cols-3 anim">
+    <div class="item warm">
+      <div class="tag active">In progress</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      <h3>Authoring Tool Renewal</h3>
+      <p>A modern Angular framework for the environment where terminology authors spend their working day. Enables three AI capabilities being built directly into the tool: concept authoring assistance, ECL query building, and in-tool clinical evidence research.</p>
+    </div>
+    <div class="item warm">
+      <div class="tag active">In progress</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </div>
+      <h3>User-Driven Releases</h3>
+      <p>Every extension release currently requires validation and packaging support from SNOMED International staff. This initiative automates the process end-to-end — members release on their own schedule, without waiting on us. A direct reduction in support burden on both sides.</p>
+    </div>
+    <div class="item warm">
+      <div class="tag active">In progress</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h7"/><path d="M9 3L4 5l5 2"/><path d="M13 19h7"/><path d="M15 21l5-2-5-2"/><circle cx="12" cy="12" r="3"/></svg>
+      </div>
+      <h3>Translation Tooling</h3>
+      <p>The translation infrastructure is being rebuilt with AI-assisted workflows designed in from the start. This is where the technology and AI strategies meet directly — the new tooling is the delivery mechanism for the AI translation service being piloted with Korea.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 7 — Year 2: Ecosystem
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="6">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:450px;height:450px;top:-100px;left:10%;"></div>
+  <span class="year-tag warm anim"><span class="dot"></span>Year 2 · 2026 · Expanding the ecosystem</span>
+  <h2 class="anim">More capability, less friction</h2>
+  <div class="items cols-3 anim">
+    <div class="item warm">
+      <div class="tag active">In progress</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </div>
+      <h3>Browser Refresh</h3>
+      <p>The most widely-used entry point to SNOMED CT for implementers, clinicians and users globally. A lighter, faster interface reduces our infrastructure overhead and improves the first impression SNOMED CT makes on new adopters.</p>
+    </div>
+    <div class="item warm">
+      <div class="tag active">Requirements phase</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </div>
+      <h3>Mapping Tool Groundwork</h3>
+      <p>Mapping SNOMED CT to ICD, LOINC, OPCS and other classifications has always been treated as peripheral. Year 2 completes the requirements work for the purpose-built, integrated Mapping Tool arriving in Year 3 — for the first time, mapping becomes first-class.</p>
+    </div>
+    <div class="item warm">
+      <div class="tag planned">Year 2–3</div>
+      <div class="icon-circle warm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      </div>
+      <h3>Package Manager</h3>
+      <p>Any licensed SNOMED CT user assembles their own edition — International + extensions + translations + standards like LOINC — in a single self-service hub. An app store for SNOMED CT content: lower barriers, less support burden, an ecosystem that grows beyond what we can resource alone.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 8 — Year 3
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="7">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow green" style="width:500px;height:500px;bottom:-100px;right:5%;"></div>
+  <span class="year-tag green anim"><span class="dot"></span>Year 3 · 2027 · The bigger initiatives unlock</span>
+  <h2 class="anim">The architectural choices compound</h2>
+  <p class="subtitle anim">With a stable platform and integrated tooling underneath, initiatives that would not have been feasible — or responsible — to attempt earlier become deliverable.</p>
+  <div class="items cols-3 anim" style="margin-top:1.3rem;">
+    <div class="item green">
+      <div class="icon-circle green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      </div>
+      <h3>Integrated Mapping Tool</h3>
+      <p>Mapping SNOMED CT to ICD, LOINC, OPCS and other classifications becomes a first-class capability with purpose-built tooling. Better tooling means more consistent, higher-quality maps — with direct implications for clinical interoperability across healthcare systems globally.</p>
+    </div>
+    <div class="item green">
+      <div class="icon-circle green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+      </div>
+      <h3>Content Request Redesign</h3>
+      <p>The mechanism through which members and community contributors request changes to SNOMED CT is slower and more manual than it needs to be. A redesigned CRS with AI-assisted submission support compresses the feedback loop between community and terminology.</p>
+    </div>
+    <div class="item green">
+      <div class="icon-circle green">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 3h-8l-2 4h12l-2-4z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      </div>
+      <h3>Extension Marketplace</h3>
+      <p>A platform where SNOMED CT extensions can be shared, discovered and validated by the community. The ambition: an ecosystem that grows in ways SNOMED International cannot anticipate or resource alone — contributors building on each other's work across the network.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 9 — AI Framing
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="8">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:650px;height:650px;top:-250px;right:-150px;"></div>
+  <div class="dot-grid" style="background-image: radial-gradient(rgba(240,148,78,0.045) 1px, transparent 1px);"></div>
+  <p class="kicker warm anim">The AI Story</p>
+  <p class="statement anim">SNOMED CT is not a passive reference for AI systems to consume.</p>
+  <p class="statement anim" style="margin-top:1.1rem;">It is an <em>active component</em> of safe, interoperable clinical AI — a structuring layer, a quality backbone, a guardrail.</p>
+  <div class="highlight warm anim">
+    <p>The AI strategy is designed to demonstrate that across multiple fronts simultaneously — <strong>translation, benchmarking, content quality, and platform integration</strong>. Taken together, these are not pilot projects hedging against uncertainty. They are a coordinated portfolio positioning SNOMED CT at the centre of the clinical AI landscape.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 10 — AI Translation
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="9">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:450px;height:450px;top:-100px;right:0;"></div>
+  <p class="kicker warm anim">AI Workstream · Translation</p>
+  <div class="two-col anim">
+    <div>
+      <h2>The barrier to SNOMED CT in your language has always been the manual translation effort</h2>
+      <p class="subtitle" style="margin-top:0.8rem;">Two proof-of-concept phases with partner Veratai are complete. Korea has confirmed as the first pilot National Release Centre. An AI-assisted translation service delivered by SNOMED International to new translating members is now within reach.</p>
+      <div class="highlight warm" style="margin-top:1.2rem;">
+        <p><strong>For countries without large communities of SNOMED CT terminologists,</strong> this is potentially transformative. The barrier to adopting SNOMED CT in a local language no longer has to be years of intensive manual work by a specialist team.</p>
+      </div>
+      <div style="margin-top:1.1rem; font-size:0.8rem; color:var(--text-dim); font-weight:500; text-transform:uppercase; letter-spacing:0.08em;">Languages in scope or under evaluation</div>
+      <div class="lang-pills" style="margin-top:0.5rem;">
+        <span class="lang-pill active">Korean — pilot</span>
+        <span class="lang-pill next">Next NRC TBD</span>
+        <span class="lang-pill">Spanish</span>
+        <span class="lang-pill">Dutch</span>
+        <span class="lang-pill">Swedish</span>
+        <span class="lang-pill">Norwegian</span>
+        <span class="lang-pill">Danish</span>
+        <span class="lang-pill">French</span>
+        <span class="lang-pill">German</span>
+        <span class="lang-pill">+ 30 more</span>
+      </div>
+    </div>
+    <div class="vis-panel" style="flex-direction:column; gap:1.2rem; border-color: rgba(240,148,78,0.15);">
+      <!-- Translation SVG illustration -->
+      <svg viewBox="0 0 200 160" width="200" height="160" xmlns="http://www.w3.org/2000/svg">
+        <!-- Source concept -->
+        <rect x="10" y="60" width="70" height="40" rx="8" fill="rgba(59,176,214,0.12)" stroke="rgba(59,176,214,0.35)" stroke-width="1.2"/>
+        <text x="45" y="79" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" fill="rgba(59,176,214,0.9)" font-weight="600">SNOMED CT</text>
+        <text x="45" y="93" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(59,176,214,0.6)">Concept #12345</text>
+        <!-- Arrow -->
+        <path d="M82 80 L118 80" stroke="rgba(240,148,78,0.5)" stroke-width="1.5" stroke-dasharray="4 2"/>
+        <polygon points="115,76 122,80 115,84" fill="rgba(240,148,78,0.5)"/>
+        <!-- AI box -->
+        <rect x="68" y="68" width="64" height="24" rx="6" fill="rgba(240,148,78,0.12)" stroke="rgba(240,148,78,0.3)" stroke-width="1"/>
+        <text x="100" y="84" text-anchor="middle" font-family="Inter,sans-serif" font-size="8.5" fill="rgba(240,148,78,0.9)" font-weight="700">AI · Veratai</text>
+        <!-- Translated outputs fan -->
+        <rect x="125" y="20" width="65" height="25" rx="6" fill="rgba(92,217,160,0.1)" stroke="rgba(92,217,160,0.3)" stroke-width="1"/>
+        <text x="157" y="37" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(92,217,160,0.8)" font-weight="600">한국어 (Korean)</text>
+        <rect x="125" y="52" width="65" height="25" rx="6" fill="rgba(92,217,160,0.07)" stroke="rgba(92,217,160,0.2)" stroke-width="1"/>
+        <text x="157" y="69" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(92,217,160,0.65)">Français</text>
+        <rect x="125" y="84" width="65" height="25" rx="6" fill="rgba(92,217,160,0.05)" stroke="rgba(92,217,160,0.15)" stroke-width="1"/>
+        <text x="157" y="101" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(92,217,160,0.5)">Deutsch</text>
+        <rect x="125" y="116" width="65" height="25" rx="6" fill="rgba(92,217,160,0.04)" stroke="rgba(92,217,160,0.1)" stroke-width="1"/>
+        <text x="157" y="133" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(92,217,160,0.38)">+ many more…</text>
+        <!-- Connector lines -->
+        <line x1="122" y1="80" x2="125" y2="32" stroke="rgba(92,217,160,0.25)" stroke-width="1"/>
+        <line x1="122" y1="80" x2="125" y2="64" stroke="rgba(92,217,160,0.2)" stroke-width="1"/>
+        <line x1="122" y1="80" x2="125" y2="96" stroke="rgba(92,217,160,0.15)" stroke-width="1"/>
+        <line x1="122" y1="80" x2="125" y2="128" stroke="rgba(92,217,160,0.1)" stroke-width="1"/>
+      </svg>
+      <div style="text-align:center;">
+        <div style="font-size:0.78rem;color:var(--text-dim); line-height:1.5;">2 PoC phases complete<br>Korea: first pilot NRC</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 11 — AI Benchmarking
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="10">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:500px;height:500px;bottom:-200px;left:10%;"></div>
+  <p class="kicker warm anim">AI Workstream · Benchmarking</p>
+  <div class="two-col anim">
+    <div>
+      <h2>We don't compete on AI benchmarks. We build them.</h2>
+      <p class="subtitle" style="margin-top:0.8rem;">The SNOMED CT entity linking benchmark launched on DrivenData in February 2026 — the largest publicly available labelled clinical notes dataset, annotated with SNOMED CT concepts by trained clinicians. The challenge: using AI to structure unstructured clinical text using SNOMED CT as the target terminology.</p>
+      <div class="highlight warm" style="margin-top:1.1rem;">
+        <p>Published in <strong>JAMIA (Journal of the American Medical Informatics Association)</strong>, July 2025. First author: Rory Davidson. SNOMED International is not watching this space from the outside — <strong>we are creating the standard others compete on.</strong></p>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:1rem;">
+      <div class="stat-grid" style="grid-template-columns: 1fr 1fr; margin-top:0;">
+        <div class="stat-grid-item">
+          <div class="num" style="color: var(--accent-warm);">75K+</div>
+          <div class="lbl">Annotated clinical notes<br>— world's largest dataset</div>
+        </div>
+        <div class="stat-grid-item">
+          <div class="num" style="color: var(--accent);">553</div>
+          <div class="lbl">Teams registered<br>for the challenge</div>
+        </div>
+        <div class="stat-grid-item">
+          <div class="num" style="color: var(--accent-green);">Live</div>
+          <div class="lbl">Open benchmark on<br>DrivenData since Feb 2026</div>
+        </div>
+        <div class="stat-grid-item">
+          <div class="num" style="color: var(--accent-purple);">JAMIA</div>
+          <div class="lbl">Peer-reviewed paper<br>published July 2025</div>
+        </div>
+      </div>
+      <!-- Podium visual -->
+      <div class="vis-panel" style="padding:1rem; border-color:rgba(240,148,78,0.1);">
+        <div style="font-size:0.7rem; color:var(--text-dimmer); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:0.8rem; text-align:center;">Entity Linking Challenge — Top 3</div>
+        <div class="podium">
+          <div class="podium-bar second">
+            <span class="place">🥈</span>
+            <span class="team">SNOBERT</span>
+            <span class="score">0.419</span>
+          </div>
+          <div class="podium-bar first">
+            <span class="place">🥇</span>
+            <span class="team">KIRI</span>
+            <span class="score">0.420</span>
+          </div>
+          <div class="podium-bar third">
+            <span class="place">🥉</span>
+            <span class="team">MITEL</span>
+            <span class="score">0.378</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 12 — AI Inside the Platform
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="11">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow purple" style="width:500px;height:500px;top:-100px;right:0;"></div>
+  <p class="kicker purple anim">AI Workstream · Platform Integration</p>
+  <h2 class="anim">AI embedded where the work happens</h2>
+  <p class="subtitle anim">Three capabilities built directly into the authoring tool. One connector making SNOMED CT natively available to AI systems everywhere.</p>
+  <div class="workflow anim">
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--accent-purple-glow); color:var(--accent-purple);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      <h4>AI Concept Authoring</h4>
+      <p>Enter a Fully Specified Name. The model returns a proposed, fully modelled concept structure for the author to review and refine.</p>
+    </div>
+    <div class="wf-arrow">›</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--accent-purple-glow); color:var(--accent-purple);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </div>
+      <h4>AI ECL Builder</h4>
+      <p>Write SNOMED CT Expression Constraint Language queries in plain language. Lowers the technical barrier to complex concept set queries for all authors.</p>
+    </div>
+    <div class="wf-arrow">›</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--accent-purple-glow); color:var(--accent-purple);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <h4>AI Concept Research</h4>
+      <p>In-tool evidence gathering replaces manual searches across PubMed, Elsevier and clinical references. Clinical evidence surfaces in context, where decisions are made.</p>
+    </div>
+    <div class="wf-arrow">›</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--snomed-blue-glow); color:var(--accent);">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6H9z"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/></svg>
+      </div>
+      <h4>SNOMED CT MCP Server</h4>
+      <p>AI systems — including Claude — can now query and reason over SNOMED CT directly. SMT-endorsed. Productionisation underway for submission to the Anthropic connector directory.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 13 — AI Content Quality
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="12">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow warm" style="width:450px;height:450px;bottom:-100px;left:5%;"></div>
+  <p class="kicker warm anim">AI Workstream · Content Quality</p>
+  <div class="two-col ratio-6-4 anim">
+    <div>
+      <h2>Quality improvement at the point of origin, not retrospectively</h2>
+      <p class="subtitle" style="margin-top:0.8rem;">Rather than attempting to audit the 366,000+ concepts in SNOMED CT after the fact, the focus has shifted to where quality problems originate: the content request process.</p>
+      <div class="highlight warm" style="margin-top:1.1rem;">
+        <p>When a member or community contributor submits a change request, the quality of their clinical reasoning and evidence directly determines how quickly it can be reviewed. <strong>AI integration into that process — guiding better submissions, surfacing relevant references, flagging evidence gaps before a request arrives — improves quality at source.</strong></p>
+      </div>
+      <div class="highlight" style="margin-top:0.9rem; border-left-color: var(--text-dimmer);">
+        <p style="font-size:0.82rem;"><strong>An honest note:</strong> AI-assisted quality improvement applied retrospectively at scale was tested in 2025 and found to be disappointing — individual runs improved 300–400 concepts, but with 366,000+ remaining, the approach did not scale. The upstream approach is more tractable, and more honest about where AI can genuinely contribute.</p>
+      </div>
+    </div>
+    <div class="vis-panel" style="flex-direction:column; gap:1.2rem; border-color: rgba(240,148,78,0.12);">
+      <svg viewBox="0 0 160 200" width="160" height="200" xmlns="http://www.w3.org/2000/svg">
+        <!-- Flow: Request -> AI Gate -> SNOMED CT -->
+        <!-- Step 1: Member request -->
+        <rect x="30" y="10" width="100" height="35" rx="8" fill="rgba(59,176,214,0.1)" stroke="rgba(59,176,214,0.3)" stroke-width="1.2"/>
+        <text x="80" y="30" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" fill="rgba(59,176,214,0.9)" font-weight="600">Member submits</text>
+        <text x="80" y="42" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(59,176,214,0.65)">content request</text>
+        <!-- Arrow down -->
+        <line x1="80" y1="47" x2="80" y2="65" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+        <polygon points="76,63 84,63 80,70" fill="rgba(255,255,255,0.15)"/>
+        <!-- Step 2: AI check -->
+        <rect x="20" y="70" width="120" height="50" rx="8" fill="rgba(240,148,78,0.12)" stroke="rgba(240,148,78,0.35)" stroke-width="1.5"/>
+        <text x="80" y="90" text-anchor="middle" font-family="Inter,sans-serif" font-size="9.5" fill="rgba(240,148,78,0.95)" font-weight="700">AI Quality Gate</text>
+        <text x="80" y="104" text-anchor="middle" font-family="Inter,sans-serif" font-size="7.5" fill="rgba(240,148,78,0.65)">Evidence · Reasoning · Gaps</text>
+        <!-- Arrow down -->
+        <line x1="80" y1="122" x2="80" y2="140" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+        <polygon points="76,138 84,138 80,145" fill="rgba(255,255,255,0.15)"/>
+        <!-- Step 3: Better input to authoring -->
+        <rect x="15" y="145" width="130" height="40" rx="8" fill="rgba(92,217,160,0.1)" stroke="rgba(92,217,160,0.3)" stroke-width="1.2"/>
+        <text x="80" y="163" text-anchor="middle" font-family="Inter,sans-serif" font-size="9" fill="rgba(92,217,160,0.9)" font-weight="600">Better evidence in</text>
+        <text x="80" y="177" text-anchor="middle" font-family="Inter,sans-serif" font-size="8" fill="rgba(92,217,160,0.65)">→ faster, higher-quality review</text>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 14 — Convergence
+══════════════════════════════════════════════════════ -->
+<div class="slide" data-slide="13">
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <div class="bg-glow green" style="width:500px;height:500px;top:-100px;right:10%;"></div>
+  <div class="bg-glow blue" style="width:400px;height:400px;bottom:-100px;left:5%;"></div>
+  <p class="kicker green anim">Where This Leads</p>
+  <h2 class="anim">The roadmap and AI stories converge</h2>
+  <div class="stat-grid anim">
+    <div class="stat-grid-item">
+      <div class="num" style="background: linear-gradient(135deg,var(--accent),#68d4f0); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-size:2rem; font-weight:800;">3-year</div>
+      <div class="lbl">Technology roadmap<br>on track and delivering</div>
+    </div>
+    <div class="stat-grid-item">
+      <div class="num" style="background: linear-gradient(135deg,var(--accent-warm),#ffc07a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-size:2rem; font-weight:800;">4</div>
+      <div class="lbl">Active AI workstreams:<br>Translation · Benchmark · Quality · MCP</div>
+    </div>
+    <div class="stat-grid-item">
+      <div class="num" style="background: linear-gradient(135deg,var(--accent-green),#a0f0cc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-size:2rem; font-weight:800;">14+</div>
+      <div class="lbl">NRCs on the Managed Service<br>platform — and growing</div>
+    </div>
+    <div class="stat-grid-item">
+      <div class="num" style="background: linear-gradient(135deg,var(--accent-purple),#d0bbff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; font-size:2rem; font-weight:800;">Open</div>
+      <div class="lbl">GPS — SNOMED CT's first CC BY 4.0<br>open-access release</div>
+    </div>
+  </div>
+  <p class="subtitle anim" style="margin-top: 1.6rem; max-width:860px;">
+    SNOMED CT is becoming easier to adopt, better supported, and more deeply embedded in the systems that healthcare organisations are building today. The foundations are in place. The platform is taking shape. The AI investments are producing real outputs.
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     SLIDE 15 — Close
+══════════════════════════════════════════════════════ -->
+<div class="slide close-slide" data-slide="14">
+  <div class="bg-glow blue" style="width:700px;height:700px;bottom:-250px;right:-150px;"></div>
+  <div class="dot-grid"></div>
+  <img class="slide-logo" src="snomed-logo.png" alt="">
+  <p class="statement anim">The question is no longer whether SNOMED CT will keep pace with the changing technology landscape.</p>
+  <p class="statement anim" style="margin-top:1.2rem;">The question is <em>how to take advantage of what is being built.</em></p>
+  <img class="close-logo anim" src="snomed-logo.png" alt="SNOMED International">
+</div>
+
+</div><!-- /deck -->
+
+<div class="deck-progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = deck.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const total = slides.length;
+  let current = 0;
+
+  function goTo(n) {
+    if (n < 0 || n >= total) return;
+    slides[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    progress.style.width = ((current / (total - 1)) * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight', ' ', 'ArrowDown'].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowLeft', 'ArrowUp'].includes(e.key))          { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'Home') goTo(0);
+    if (e.key === 'End')  goTo(total - 1);
+    if (e.key === 'f' || e.key === 'F') {
+      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    }
+  });
+
+  let touchStartX = 0;
+  deck.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; });
+  deck.addEventListener('touchend',   e => {
+    const diff = e.changedTouches[0].screenX - touchStartX;
+    if (Math.abs(diff) > 50) { diff < 0 ? goTo(current + 1) : goTo(current - 1); }
+  });
+
+  deck.addEventListener('click', e => {
+    const x = e.clientX / window.innerWidth;
+    x < 0.33 ? goTo(current - 1) : goTo(current + 1);
+  });
+
+  goTo(0);
+</script>
+</body>
+</html>

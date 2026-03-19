@@ -1,0 +1,12 @@
+{
+  "name": "html-slides-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WYSIWYG editor for single-file HTML slide decks",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
