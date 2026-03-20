@@ -7,12 +7,29 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SLIDES_DIR = process.env.SLIDES_DIR || process.cwd();
 
+// Allowed root directories for file access (home dir and SLIDES_DIR)
+const ALLOWED_ROOTS = [
+  path.resolve(os.homedir()),
+  path.resolve(SLIDES_DIR),
+];
+
+function isPathAllowed(resolvedPath) {
+  return ALLOWED_ROOTS.some(root => resolvedPath.startsWith(root + path.sep) || resolvedPath === root);
+}
+
+function requireHtmlExtension(filePath) {
+  return path.extname(filePath).toLowerCase() === '.html';
+}
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // List HTML files in a directory (defaults to SLIDES_DIR)
 app.get('/api/files', (req, res) => {
   const dir = req.query.dir ? path.resolve(req.query.dir) : SLIDES_DIR;
+  if (!isPathAllowed(dir)) {
+    return res.status(403).json({ error: 'Access denied: path outside allowed directories' });
+  }
   try {
     const files = fs.readdirSync(dir)
       .filter(f => f.endsWith('.html') && !f.startsWith('.'))
@@ -34,6 +51,9 @@ app.get('/api/files', (req, res) => {
 // Browse directories — returns subdirectories and parent path
 app.get('/api/browse', (req, res) => {
   const dir = req.query.dir ? path.resolve(req.query.dir) : os.homedir();
+  if (!isPathAllowed(dir)) {
+    return res.status(403).json({ error: 'Access denied: path outside allowed directories' });
+  }
   try {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     const dirs = entries
@@ -65,12 +85,18 @@ app.get('/api/browse', (req, res) => {
   }
 });
 
-// Read an HTML file (accepts absolute paths)
+// Read an HTML file
 app.get('/api/file', (req, res) => {
   const filePath = req.query.path;
   if (!filePath) return res.status(400).json({ error: 'path parameter required' });
 
   const resolved = path.resolve(filePath);
+  if (!isPathAllowed(resolved)) {
+    return res.status(403).json({ error: 'Access denied: path outside allowed directories' });
+  }
+  if (!requireHtmlExtension(resolved)) {
+    return res.status(403).json({ error: 'Only .html files can be read' });
+  }
 
   try {
     const content = fs.readFileSync(resolved, 'utf-8');
@@ -80,7 +106,7 @@ app.get('/api/file', (req, res) => {
   }
 });
 
-// Write an HTML file (accepts absolute paths)
+// Write an HTML file
 app.post('/api/file', (req, res) => {
   const { path: filePath, content } = req.body;
   if (!filePath || !content) {
@@ -88,6 +114,12 @@ app.post('/api/file', (req, res) => {
   }
 
   const resolved = path.resolve(filePath);
+  if (!isPathAllowed(resolved)) {
+    return res.status(403).json({ error: 'Access denied: path outside allowed directories' });
+  }
+  if (!requireHtmlExtension(resolved)) {
+    return res.status(403).json({ error: 'Only .html files can be written' });
+  }
 
   try {
     fs.writeFileSync(resolved, content, 'utf-8');

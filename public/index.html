@@ -481,8 +481,16 @@ let dirty = false;
 async function api(method, url, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  return res.json();
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || `Server error (${res.status})` };
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: `Network error: ${err.message}` };
+  }
 }
 
 function toast(msg, isError) {
@@ -496,6 +504,7 @@ function toast(msg, isError) {
 let currentBrowserDir = '';
 
 async function openFileModal() {
+  if (dirty && !confirm('You have unsaved changes. Open a different file anyway?')) return;
   document.getElementById('openModal').classList.remove('hidden');
   // Start at the default slides directory
   browseTo('');
@@ -605,6 +614,10 @@ async function confirmSaveAs() {
 }
 
 // ─── Parsing ───
+let extraStyles = [];   // additional <style> elements beyond the first
+let extraScripts = [];  // additional <script> elements beyond the first
+let postDeckContent = ''; // content between the deck and first script (progress bar, counter, etc.)
+
 function parseSlides(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
@@ -612,20 +625,35 @@ function parseSlides(html) {
   // Extract head content (title, meta, link tags)
   const headEl = doc.querySelector('head');
   headContent = '';
+  extraStyles = [];
   if (headEl) {
+    let firstStyle = true;
     for (const child of headEl.children) {
-      if (child.tagName === 'STYLE') continue;
+      if (child.tagName === 'STYLE') {
+        if (firstStyle) {
+          styleContent = child.textContent;
+          firstStyle = false;
+        } else {
+          extraStyles.push(child.outerHTML);
+        }
+        continue;
+      }
       headContent += child.outerHTML + '\n';
     }
+    if (firstStyle) styleContent = ''; // no style found
   }
 
-  // Extract style
-  const styleEl = doc.querySelector('style');
-  styleContent = styleEl ? styleEl.textContent : '';
-
-  // Extract script
-  const scriptEl = doc.querySelector('script');
-  scriptContent = scriptEl ? scriptEl.textContent : '';
+  // Extract scripts — first one is the main presentation script
+  extraScripts = [];
+  const scriptEls = doc.querySelectorAll('body script');
+  scriptContent = '';
+  scriptEls.forEach((el, i) => {
+    if (i === 0) {
+      scriptContent = el.textContent;
+    } else {
+      extraScripts.push(el.outerHTML);
+    }
+  });
 
   // Extract slides
   slides = [];
@@ -636,7 +664,16 @@ function parseSlides(html) {
     });
   }
 
-  // Also capture any elements between deck and script (progress bar, counter)
+  // Capture content between the deck and the first script (progress bar, counter, etc.)
+  postDeckContent = '';
+  if (deck) {
+    let sibling = deck.nextElementSibling;
+    while (sibling && sibling.tagName !== 'SCRIPT') {
+      postDeckContent += sibling.outerHTML + '\n';
+      sibling = sibling.nextElementSibling;
+    }
+  }
+
   selectedSlide = slides.length > 0 ? 0 : -1;
 }
 
@@ -644,6 +681,7 @@ function reassemble() {
   let html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n';
   html += headContent;
   html += '<style>\n' + styleContent + '\n</style>\n';
+  extraStyles.forEach(s => { html += s + '\n'; });
   html += '</head>\n<body>\n';
   html += '<div class="deck" id="deck">\n\n';
 
@@ -666,9 +704,12 @@ function reassemble() {
   });
 
   html += '</div><!-- /deck -->\n\n';
-  html += '<div class="deck-progress" id="progress"></div>\n';
-  html += '<div class="counter" id="counter"></div>\n\n';
+  // Restore original post-deck content (progress bar, counter, etc.)
+  if (postDeckContent) {
+    html += postDeckContent + '\n';
+  }
   html += '<script>\n' + scriptContent + '\n<\/script>\n';
+  extraScripts.forEach(s => { html += s + '\n'; });
   html += '</body>\n</html>';
   return html;
 }
@@ -821,8 +862,6 @@ function deleteSlide(i) {
 
 function addSlide() {
   const newSlide = `<div class="slide" data-slide="${slides.length}">
-  <img class="slide-logo" src="snomed-logo.png" alt="">
-  <div class="bg-glow blue" style="width:500px;height:500px;top:-100px;right:5%;"></div>
   <p class="kicker blue anim">Section</p>
   <h2 class="anim">New Slide</h2>
   <p class="subtitle anim">Add your content here.</p>
@@ -1243,8 +1282,15 @@ function escHtml(s) {
 }
 
 function escAttr(s) {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// ─── Unsaved changes guard ───
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) {
+    e.preventDefault();
+  }
+});
 
 // ─── Keyboard shortcuts ───
 document.addEventListener('keydown', (e) => {
