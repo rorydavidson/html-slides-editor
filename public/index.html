@@ -397,6 +397,12 @@
   <button onclick="saveFile()" id="btnSave" disabled>Save</button>
   <button onclick="saveAsFile()" id="btnSaveAs" disabled>Save As</button>
   <button onclick="addSlide()" id="btnAdd" disabled>+ Slide</button>
+  <span id="logoControls" style="display:none; margin-left:0.5rem; align-items:center; gap:0.4rem;">
+    <label style="font-size:0.7rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Logo:</label>
+    <input type="text" id="deckLogoInput" style="width:160px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:0.3rem 0.5rem; font-size:0.75rem;" placeholder="logo-url.png" onchange="setDeckLogo(this.value)">
+    <button onclick="applyLogoToAll()" title="Apply logo to all slides" style="font-size:0.7rem;">Apply All</button>
+    <button class="danger" onclick="removeDeckLogo()" title="Remove logo from all slides" style="font-size:0.7rem; padding:0.3rem 0.5rem;">&times;</button>
+  </span>
 </div>
 
 <!-- Main layout -->
@@ -476,6 +482,7 @@ let scriptContent = '';
 let slides = [];       // array of slide HTML strings (outer div included)
 let selectedSlide = -1;
 let dirty = false;
+let deckLogo = '';     // deck-level logo URL (auto-detected or user-set)
 
 // ─── API helpers ───
 async function api(method, url, body) {
@@ -674,6 +681,17 @@ function parseSlides(html) {
     }
   }
 
+  // Auto-detect logo from the first slide that has one
+  deckLogo = '';
+  for (const s of slides) {
+    const tmpDoc = new DOMParser().parseFromString(s, 'text/html');
+    const logo = tmpDoc.querySelector('img.slide-logo');
+    if (logo && logo.getAttribute('src')) {
+      deckLogo = logo.getAttribute('src');
+      break;
+    }
+  }
+
   selectedSlide = slides.length > 0 ? 0 : -1;
 }
 
@@ -723,6 +741,8 @@ function updateUI() {
   document.getElementById('btnSave').disabled = !currentFile;
   document.getElementById('btnSaveAs').disabled = slides.length === 0;
   document.getElementById('btnAdd').disabled = slides.length === 0;
+  document.getElementById('logoControls').style.display = currentFile ? 'inline-flex' : 'none';
+  document.getElementById('deckLogoInput').value = deckLogo;
 }
 
 function updateFilename() {
@@ -861,7 +881,8 @@ function deleteSlide(i) {
 }
 
 function addSlide() {
-  const newSlide = `<div class="slide" data-slide="${slides.length}">
+  const logoHtml = deckLogo ? `\n  <img class="slide-logo" src="${escAttr(deckLogo)}" alt="">` : '';
+  const newSlide = `<div class="slide" data-slide="${slides.length}">${logoHtml}
   <p class="kicker blue anim">Section</p>
   <h2 class="anim">New Slide</h2>
   <p class="subtitle anim">Add your content here.</p>
@@ -875,6 +896,44 @@ function addSlide() {
   // Scroll to bottom of slide list
   const list = document.getElementById('slideList');
   list.scrollTop = list.scrollHeight;
+}
+
+// ─── Deck logo ───
+function setDeckLogo(url) {
+  deckLogo = url.trim();
+  markDirty();
+}
+
+function applyLogoToAll() {
+  slides = slides.map(s => {
+    const doc = new DOMParser().parseFromString(s, 'text/html');
+    const slide = doc.querySelector('.slide');
+    if (!slide) return s;
+    let logo = slide.querySelector('img.slide-logo');
+    if (deckLogo) {
+      if (!logo) {
+        logo = doc.createElement('img');
+        logo.className = 'slide-logo';
+        logo.alt = '';
+        slide.insertBefore(logo, slide.firstChild);
+      }
+      logo.src = deckLogo;
+    } else if (logo) {
+      logo.remove();
+    }
+    return slide.outerHTML;
+  });
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  toast(deckLogo ? 'Logo applied to all slides' : 'Logo removed from all slides');
+}
+
+function removeDeckLogo() {
+  deckLogo = '';
+  document.getElementById('deckLogoInput').value = '';
+  applyLogoToAll();
 }
 
 // ─── Editor ───
@@ -973,6 +1032,17 @@ function renderEditor() {
 
 function findEditables(slide) {
   const eds = [];
+
+  // Logo
+  const logo = slide.querySelector('img.slide-logo');
+  if (logo) {
+    eds.push({ type: 'text', label: 'Logo URL', selector: 'img.slide-logo', value: logo.getAttribute('src') || '',
+      apply: (el, val) => {
+        if (val) { el.setAttribute('src', val); }
+        else { el.remove(); }
+      }
+    });
+  }
 
   // Kicker
   const kicker = slide.querySelector('.kicker');
