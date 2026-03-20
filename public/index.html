@@ -385,6 +385,68 @@
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Palette swatches ── */
+  .palette-option {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .palette-option:hover { background: var(--surface-hover); }
+  .palette-swatches { display: flex; gap: 4px; }
+  .palette-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .palette-name { font-size: 0.85rem; font-weight: 500; }
+  .palette-desc { font-size: 0.7rem; color: var(--text-dim); }
+
+  /* ── Layout selector ── */
+  .layout-selector {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1.2rem;
+  }
+  .layout-option {
+    flex-shrink: 0;
+    width: 100px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    padding: 0.4rem;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: center;
+  }
+  .layout-option:hover { border-color: var(--border); background: var(--surface-hover); }
+  .layout-option.active { border-color: var(--accent); background: var(--surface-hover); }
+  .layout-preview {
+    aspect-ratio: 16/9;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.3rem;
+  }
+  .layout-preview svg { width: 100%; height: 100%; }
+  .layout-name { font-size: 0.62rem; font-weight: 600; color: var(--text-dim); line-height: 1.2; }
+
+  /* ── Print ── */
+  @media print {
+    .toolbar, .sidebar, .editor-panel, .modal-overlay, .toast,
+    #printContainer { display: none !important; }
+    body { overflow: visible; height: auto; background: white; }
+    .main { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -393,10 +455,19 @@
 <div class="toolbar">
   <h1>Slides Editor</h1>
   <span class="filename" id="filename">No file open</span>
+  <button onclick="newDeck()">New</button>
   <button onclick="openFileModal()">Open</button>
   <button onclick="saveFile()" id="btnSave" disabled>Save</button>
   <button onclick="saveAsFile()" id="btnSaveAs" disabled>Save As</button>
   <button onclick="addSlide()" id="btnAdd" disabled>+ Slide</button>
+  <button onclick="printDeck()" id="btnPrint" disabled>Print</button>
+  <button onclick="openPaletteModal()" id="btnPalette" disabled>Palette</button>
+  <span id="logoControls" style="display:none; margin-left:0.5rem; align-items:center; gap:0.4rem;">
+    <label style="font-size:0.7rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Logo:</label>
+    <input type="text" id="deckLogoInput" style="width:160px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:0.3rem 0.5rem; font-size:0.75rem;" placeholder="logo-url.png" onchange="setDeckLogo(this.value)">
+    <button onclick="applyLogoToAll()" title="Apply logo to all slides" style="font-size:0.7rem;">Apply All</button>
+    <button class="danger" onclick="removeDeckLogo()" title="Remove logo from all slides" style="font-size:0.7rem; padding:0.3rem 0.5rem;">&times;</button>
+  </span>
 </div>
 
 <!-- Main layout -->
@@ -463,6 +534,17 @@
   </div>
 </div>
 
+<!-- Palette modal -->
+<div class="modal-overlay hidden" id="paletteModal">
+  <div class="modal" style="min-width:500px;max-width:550px;">
+    <h2>Color Palette</h2>
+    <div id="paletteList" style="max-height:400px;overflow-y:auto;"></div>
+    <div style="margin-top:1rem; text-align:right;">
+      <button onclick="closePaletteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -476,13 +558,22 @@ let scriptContent = '';
 let slides = [];       // array of slide HTML strings (outer div included)
 let selectedSlide = -1;
 let dirty = false;
+let deckLogo = '';     // deck-level logo URL (auto-detected or user-set)
 
 // ─── API helpers ───
 async function api(method, url, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  return res.json();
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { error: data.error || `Server error (${res.status})` };
+    }
+    return await res.json();
+  } catch (err) {
+    return { error: `Network error: ${err.message}` };
+  }
 }
 
 function toast(msg, isError) {
@@ -496,6 +587,7 @@ function toast(msg, isError) {
 let currentBrowserDir = '';
 
 async function openFileModal() {
+  if (dirty && !confirm('You have unsaved changes. Open a different file anyway?')) return;
   document.getElementById('openModal').classList.remove('hidden');
   // Start at the default slides directory
   browseTo('');
@@ -605,6 +697,10 @@ async function confirmSaveAs() {
 }
 
 // ─── Parsing ───
+let extraStyles = [];   // additional <style> elements beyond the first
+let extraScripts = [];  // additional <script> elements beyond the first
+let postDeckContent = ''; // content between the deck and first script (progress bar, counter, etc.)
+
 function parseSlides(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
@@ -612,20 +708,35 @@ function parseSlides(html) {
   // Extract head content (title, meta, link tags)
   const headEl = doc.querySelector('head');
   headContent = '';
+  extraStyles = [];
   if (headEl) {
+    let firstStyle = true;
     for (const child of headEl.children) {
-      if (child.tagName === 'STYLE') continue;
+      if (child.tagName === 'STYLE') {
+        if (firstStyle) {
+          styleContent = child.textContent;
+          firstStyle = false;
+        } else {
+          extraStyles.push(child.outerHTML);
+        }
+        continue;
+      }
       headContent += child.outerHTML + '\n';
     }
+    if (firstStyle) styleContent = ''; // no style found
   }
 
-  // Extract style
-  const styleEl = doc.querySelector('style');
-  styleContent = styleEl ? styleEl.textContent : '';
-
-  // Extract script
-  const scriptEl = doc.querySelector('script');
-  scriptContent = scriptEl ? scriptEl.textContent : '';
+  // Extract scripts — first one is the main presentation script
+  extraScripts = [];
+  const scriptEls = doc.querySelectorAll('body script');
+  scriptContent = '';
+  scriptEls.forEach((el, i) => {
+    if (i === 0) {
+      scriptContent = el.textContent;
+    } else {
+      extraScripts.push(el.outerHTML);
+    }
+  });
 
   // Extract slides
   slides = [];
@@ -636,7 +747,27 @@ function parseSlides(html) {
     });
   }
 
-  // Also capture any elements between deck and script (progress bar, counter)
+  // Capture content between the deck and the first script (progress bar, counter, etc.)
+  postDeckContent = '';
+  if (deck) {
+    let sibling = deck.nextElementSibling;
+    while (sibling && sibling.tagName !== 'SCRIPT') {
+      postDeckContent += sibling.outerHTML + '\n';
+      sibling = sibling.nextElementSibling;
+    }
+  }
+
+  // Auto-detect logo from the first slide that has one
+  deckLogo = '';
+  for (const s of slides) {
+    const tmpDoc = new DOMParser().parseFromString(s, 'text/html');
+    const logo = tmpDoc.querySelector('img.slide-logo');
+    if (logo && logo.getAttribute('src')) {
+      deckLogo = logo.getAttribute('src');
+      break;
+    }
+  }
+
   selectedSlide = slides.length > 0 ? 0 : -1;
 }
 
@@ -644,6 +775,7 @@ function reassemble() {
   let html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n';
   html += headContent;
   html += '<style>\n' + styleContent + '\n</style>\n';
+  extraStyles.forEach(s => { html += s + '\n'; });
   html += '</head>\n<body>\n';
   html += '<div class="deck" id="deck">\n\n';
 
@@ -666,9 +798,12 @@ function reassemble() {
   });
 
   html += '</div><!-- /deck -->\n\n';
-  html += '<div class="deck-progress" id="progress"></div>\n';
-  html += '<div class="counter" id="counter"></div>\n\n';
+  // Restore original post-deck content (progress bar, counter, etc.)
+  if (postDeckContent) {
+    html += postDeckContent + '\n';
+  }
   html += '<script>\n' + scriptContent + '\n<\/script>\n';
+  extraScripts.forEach(s => { html += s + '\n'; });
   html += '</body>\n</html>';
   return html;
 }
@@ -682,6 +817,10 @@ function updateUI() {
   document.getElementById('btnSave').disabled = !currentFile;
   document.getElementById('btnSaveAs').disabled = slides.length === 0;
   document.getElementById('btnAdd').disabled = slides.length === 0;
+  document.getElementById('btnPrint').disabled = slides.length === 0;
+  document.getElementById('btnPalette').disabled = slides.length === 0;
+  document.getElementById('logoControls').style.display = currentFile ? 'inline-flex' : 'none';
+  document.getElementById('deckLogoInput').value = deckLogo;
 }
 
 function updateFilename() {
@@ -820,9 +959,8 @@ function deleteSlide(i) {
 }
 
 function addSlide() {
-  const newSlide = `<div class="slide" data-slide="${slides.length}">
-  <img class="slide-logo" src="snomed-logo.png" alt="">
-  <div class="bg-glow blue" style="width:500px;height:500px;top:-100px;right:5%;"></div>
+  const logoHtml = deckLogo ? `\n  <img class="slide-logo" src="${escAttr(deckLogo)}" alt="">` : '';
+  const newSlide = `<div class="slide" data-slide="${slides.length}">${logoHtml}
   <p class="kicker blue anim">Section</p>
   <h2 class="anim">New Slide</h2>
   <p class="subtitle anim">Add your content here.</p>
@@ -836,6 +974,696 @@ function addSlide() {
   // Scroll to bottom of slide list
   const list = document.getElementById('slideList');
   list.scrollTop = list.scrollHeight;
+}
+
+// ─── New deck ───
+function newDeck() {
+  if (dirty && !confirm('You have unsaved changes. Create a new deck anyway?')) return;
+
+  const name = prompt('Filename for the new deck:', 'new-deck.html');
+  if (!name) return;
+
+  const filename = name.endsWith('.html') ? name : name + '.html';
+  let filePath = filename;
+  if (!filename.includes('/') && currentFile) {
+    const dir = currentFile.substring(0, currentFile.lastIndexOf('/'));
+    filePath = dir + '/' + filename;
+  }
+
+  currentFile = filePath;
+  rawHtml = buildNewDeckHtml('New Presentation');
+  parseSlides(rawHtml);
+  dirty = true;
+  updateUI();
+  toast('New deck created — save to write to disk');
+}
+
+function buildNewDeckHtml(title) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escHtml(title)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0c1520;
+    --surface: #132030;
+    --surface-light: #1a2940;
+    --text: #e8edf2;
+    --text-dim: #8ba0b8;
+    --accent: #3bb0d6;
+    --accent-warm: #f0944e;
+    --accent-green: #5cd9a0;
+    --accent-purple: #a78bfa;
+    --slide-max: 1100px;
+  }
+
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; width: 100vw; }
+  .deck { position: relative; width: 100%; height: 100%; }
+  .slide {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: center; padding: 5vh 7vw;
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.55s ease, transform 0.55s ease;
+    pointer-events: none;
+  }
+  .slide.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .slide .anim { opacity: 0; transform: translateY(16px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .slide.active .anim { opacity: 1; transform: translateY(0); }
+
+  h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); font-weight: 800; line-height: 1.1; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.6rem); font-weight: 700; line-height: 1.2; margin-bottom: 0.8rem; }
+  .subtitle { font-size: clamp(0.95rem, 1.6vw, 1.25rem); font-weight: 300; color: var(--text-dim); line-height: 1.65; max-width: 700px; }
+  .kicker { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.9rem; }
+  .kicker.blue { color: var(--accent); }
+  .kicker.warm { color: var(--accent-warm); }
+  .kicker.green { color: var(--accent-green); }
+  .kicker.purple { color: var(--accent-purple); }
+
+  .items { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+  .item { background: var(--surface-light); border-radius: 12px; padding: 1.5rem; }
+  .item h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .item p { font-size: 0.88rem; color: var(--text-dim); line-height: 1.55; }
+
+  .deck-progress { position: fixed; bottom: 0; left: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-warm)); transition: width 0.4s ease; z-index: 100; }
+  .counter { position: fixed; bottom: 1.4rem; right: 1.8rem; font-size: 0.72rem; color: var(--text-dim); z-index: 100; opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<div class="slide active" data-slide="0">
+  <h1 class="anim">${escHtml(title)}</h1>
+  <p class="subtitle anim">Add your subtitle here.</p>
+</div>
+
+</div>
+
+<div class="deck-progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = deck.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const total = slides.length;
+  let current = 0;
+  function goTo(n) {
+    if (n < 0 || n >= total) return;
+    slides[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    progress.style.width = ((current / (total - 1)) * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight',' ','ArrowDown'].includes(e.key)) { e.preventDefault(); goTo(current+1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); goTo(current-1); }
+  });
+  goTo(0);
+<\/script>
+</body>
+</html>`;
+}
+
+// ─── Print to PDF ───
+function printDeck() {
+  if (!slides.length) return;
+  const printHtml = buildPrintHtml();
+
+  // Open the print-ready deck in a new window and trigger print
+  const win = window.open('', '_blank');
+  if (!win) { toast('Pop-up blocked — please allow pop-ups for this site', true); return; }
+  win.document.write(printHtml);
+  win.document.close();
+  win.onload = () => {
+    win.focus();
+    win.print();
+  };
+}
+
+function buildPrintHtml() {
+  const printOverrides = `
+    @page { size: landscape; margin: 0; }
+    @media print { @page { size: landscape; margin: 0; } }
+    html, body { overflow: visible; height: auto; margin: 0; padding: 0; }
+    body { background: var(--bg, #0c1520); }
+    .deck { position: static; width: auto; height: auto; overflow: visible; }
+    .slide {
+      position: relative !important;
+      opacity: 1 !important;
+      transform: none !important;
+      pointer-events: auto !important;
+      width: 100vw;
+      height: 100vh;
+      page-break-after: always;
+      break-after: page;
+      display: flex !important;
+      flex-direction: column;
+      justify-content: center;
+      padding: 5vh 7vw;
+      overflow: hidden;
+    }
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+    .slide .anim { opacity: 1 !important; transform: none !important; }
+    .deck-progress, .counter { display: none !important; }
+  `;
+
+  let html = '<!DOCTYPE html><html><head>\n';
+  html += headContent;
+  html += '<style>\n' + styleContent + '\n' + printOverrides + '\n</style>\n';
+  extraStyles.forEach(s => { html += s + '\n'; });
+  html += '</head><body>\n<div class="deck">\n';
+  slides.forEach(s => {
+    html += s.replace(/class="slide([^"]*)"/, 'class="slide$1 active"') + '\n';
+  });
+  html += '</div>\n</body></html>';
+  return html;
+}
+
+// ─── Color palette ───
+const PALETTES = [
+  {
+    name: 'Ocean',
+    desc: 'Deep blue tones with teal accent',
+    vars: {
+      '--bg': '#0c1520', '--surface': '#132030', '--surface-light': '#1a2940',
+      '--text': '#e8edf2', '--text-dim': '#8ba0b8',
+      '--accent': '#3bb0d6', '--accent-warm': '#f0944e',
+      '--accent-green': '#5cd9a0', '--accent-purple': '#a78bfa'
+    }
+  },
+  {
+    name: 'Midnight',
+    desc: 'Dark purple with vibrant accents',
+    vars: {
+      '--bg': '#0f0f1a', '--surface': '#1a1a2e', '--surface-light': '#25253f',
+      '--text': '#e0e0f0', '--text-dim': '#8888aa',
+      '--accent': '#6c63ff', '--accent-warm': '#ff6b6b',
+      '--accent-green': '#51cf66', '--accent-purple': '#cc5de8'
+    }
+  },
+  {
+    name: 'Forest',
+    desc: 'Deep green with natural tones',
+    vars: {
+      '--bg': '#0a1a14', '--surface': '#12261c', '--surface-light': '#1a3326',
+      '--text': '#e0f0e8', '--text-dim': '#88aa96',
+      '--accent': '#4ecdc4', '--accent-warm': '#f7b731',
+      '--accent-green': '#26de81', '--accent-purple': '#a78bfa'
+    }
+  },
+  {
+    name: 'Ember',
+    desc: 'Warm darks with fiery accents',
+    vars: {
+      '--bg': '#1a0e0e', '--surface': '#2a1515', '--surface-light': '#3a2020',
+      '--text': '#f0e0e0', '--text-dim': '#aa8888',
+      '--accent': '#ff6348', '--accent-warm': '#ffa502',
+      '--accent-green': '#7bed9f', '--accent-purple': '#cf6a87'
+    }
+  },
+  {
+    name: 'Light',
+    desc: 'Clean light background, dark text',
+    vars: {
+      '--bg': '#f5f5f5', '--surface': '#ffffff', '--surface-light': '#e8e8e8',
+      '--text': '#1a1a2e', '--text-dim': '#666680',
+      '--accent': '#2563eb', '--accent-warm': '#ea580c',
+      '--accent-green': '#16a34a', '--accent-purple': '#9333ea'
+    }
+  },
+  {
+    name: 'Charcoal',
+    desc: 'Neutral grey with vivid accents',
+    vars: {
+      '--bg': '#1c1c1c', '--surface': '#2a2a2a', '--surface-light': '#383838',
+      '--text': '#eeeeee', '--text-dim': '#999999',
+      '--accent': '#00b4d8', '--accent-warm': '#fb8500',
+      '--accent-green': '#06d6a0', '--accent-purple': '#8338ec'
+    }
+  },
+  {
+    name: 'Corporate',
+    desc: 'Navy with classic blue accent',
+    vars: {
+      '--bg': '#0b1929', '--surface': '#112240', '--surface-light': '#1a3050',
+      '--text': '#e6f1ff', '--text-dim': '#8892b0',
+      '--accent': '#2196f3', '--accent-warm': '#ff9800',
+      '--accent-green': '#4caf50', '--accent-purple': '#7c4dff'
+    }
+  },
+  {
+    name: 'Sunset',
+    desc: 'Warm gradient-inspired palette',
+    vars: {
+      '--bg': '#1a1019', '--surface': '#2a1828', '--surface-light': '#3a2238',
+      '--text': '#f0e6ee', '--text-dim': '#aa88a6',
+      '--accent': '#f06292', '--accent-warm': '#ffab40',
+      '--accent-green': '#69f0ae', '--accent-purple': '#b388ff'
+    }
+  }
+];
+
+function openPaletteModal() {
+  document.getElementById('paletteModal').classList.remove('hidden');
+  renderPaletteList();
+}
+
+function closePaletteModal() {
+  document.getElementById('paletteModal').classList.add('hidden');
+}
+
+function renderPaletteList() {
+  const list = document.getElementById('paletteList');
+  list.innerHTML = PALETTES.map((p, i) => {
+    const swatchKeys = ['--bg', '--accent', '--accent-warm', '--accent-green', '--accent-purple'];
+    const swatches = swatchKeys
+      .map(key => p.vars[key] ? `<div class="palette-swatch" style="background:${p.vars[key]}"></div>` : '')
+      .join('');
+    return `<div class="palette-option" onclick="applyPalette(${i})">
+      <div class="palette-swatches">${swatches}</div>
+      <div>
+        <div class="palette-name">${escHtml(p.name)}</div>
+        <div class="palette-desc">${escHtml(p.desc)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function applyPalette(index) {
+  const palette = PALETTES[index];
+  for (const [prop, value] of Object.entries(palette.vars)) {
+    const regex = new RegExp(
+      '(' + prop.replace(/-/g, '\\-') + '\\s*:\\s*)([^;\\n}]+)',
+      'g'
+    );
+    styleContent = styleContent.replace(regex, '$1' + value);
+  }
+  markDirty();
+  closePaletteModal();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  toast('Applied palette: ' + palette.name);
+}
+
+// ─── Slide layouts ───
+const SLIDE_LAYOUTS = [
+  {
+    id: 'title-only',
+    name: 'Title Only',
+    desc: 'Large title with subtitle',
+    detect: (el) => el.querySelector('h1') && !el.querySelector('h2') && !el.querySelector('.items'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="12" width="44" height="6" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="22" width="56" height="3" rx="1" fill="#8ba0b844"/>
+      <rect x="8" y="28" width="40" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <h1 class="anim">Title</h1>
+  <p class="subtitle anim">Subtitle text here.</p>`
+  },
+  {
+    id: 'title-subtitle',
+    name: 'Kicker + Title',
+    desc: 'Kicker label, heading, and subtitle',
+    detect: (el) => el.querySelector('.kicker') && el.querySelector('h2') && !el.querySelector('.items') && !el.querySelector('.timeline') && !el.querySelector('.stat') && !el.querySelector('.highlight'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="18" height="3" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="15" width="40" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="24" width="52" height="3" rx="1" fill="#8ba0b844"/>
+      <rect x="8" y="30" width="38" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <p class="subtitle anim">Subtitle text here.</p>`
+  },
+  {
+    id: 'section-break',
+    name: 'Statement',
+    desc: 'Large statement or quote text',
+    detect: (el) => !!el.querySelector('.statement'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="10" width="64" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="18" width="58" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="26" width="48" height="5" rx="1" fill="#8ba0b8"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="statement anim">Your statement or key message goes here. Make it bold and impactful.</p>`
+  },
+  {
+    id: 'card-grid',
+    name: 'Card Grid',
+    desc: 'Heading with card items',
+    detect: (el) => !!el.querySelector('.items'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="4" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="29" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="54" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <div class="items">
+    <div class="item anim"><h3>Item One</h3><p>Description for the first item.</p></div>
+    <div class="item anim"><h3>Item Two</h3><p>Description for the second item.</p></div>
+    <div class="item anim"><h3>Item Three</h3><p>Description for the third item.</p></div>
+  </div>`
+  },
+  {
+    id: 'two-columns',
+    name: 'Two Columns',
+    desc: 'Heading with two content columns',
+    detect: (el) => !!el.querySelector('.two-col'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="4" y="17" width="35" height="24" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="42" y="17" width="35" height="24" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1.5rem;">
+    <div class="anim"><p>Left column content goes here.</p></div>
+    <div class="anim"><p>Right column content goes here.</p></div>
+  </div>`
+  },
+  {
+    id: 'stats',
+    name: 'Statistics',
+    desc: 'Key figures with labels',
+    detect: (el) => el.querySelectorAll('.stat').length > 0,
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <text x="14" y="30" font-size="10" fill="#3bb0d6" font-weight="bold">42</text>
+      <text x="38" y="30" font-size="10" fill="#f0944e" font-weight="bold">87</text>
+      <text x="60" y="30" font-size="10" fill="#5cd9a0" font-weight="bold">5K</text>
+      <rect x="8" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+      <rect x="33" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+      <rect x="56" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Key Figures</h2>
+  <div class="stat-row" style="display:flex;gap:3rem;margin-top:2rem;">
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent);">100</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric One</div></div>
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent-warm);">250</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric Two</div></div>
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent-green);">5K</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric Three</div></div>
+  </div>`
+  },
+  {
+    id: 'timeline',
+    name: 'Timeline',
+    desc: 'Phases arranged in a timeline',
+    detect: (el) => !!el.querySelector('.timeline'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <line x1="8" y1="20" x2="72" y2="20" stroke="#8ba0b844" stroke-width="1"/>
+      <circle cx="16" cy="20" r="2.5" fill="#3bb0d6"/>
+      <circle cx="40" cy="20" r="2.5" fill="#f0944e"/>
+      <circle cx="64" cy="20" r="2.5" fill="#5cd9a0"/>
+      <rect x="8" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="32" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="56" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Timeline</h2>
+  <div class="timeline" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:2rem;">
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent);margin-bottom:0.5rem;">Phase 1</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">First Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of first phase.</p>
+    </div>
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent-warm);margin-bottom:0.5rem;">Phase 2</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">Second Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of second phase.</p>
+    </div>
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent-green);margin-bottom:0.5rem;">Phase 3</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">Third Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of third phase.</p>
+    </div>
+  </div>`
+  },
+  {
+    id: 'highlight',
+    name: 'Highlight Box',
+    desc: 'Heading with highlighted content box',
+    detect: (el) => !!el.querySelector('.highlight'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="18" width="64" height="20" rx="3" fill="#3bb0d620" stroke="#3bb0d6" stroke-width="0.8"/>
+      <rect x="14" y="23" width="36" height="3" rx="1" fill="#8ba0b8"/>
+      <rect x="14" y="29" width="28" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <p class="subtitle anim">Supporting text goes here.</p>
+  <div class="highlight anim" style="background:var(--surface-light);border-radius:12px;padding:1.5rem;margin-top:1.5rem;">
+    <p>Highlighted content goes here. This box draws attention to key information.</p>
+  </div>`
+  },
+  {
+    id: 'blank',
+    name: 'Blank',
+    desc: 'Empty slide for custom content',
+    detect: () => false,
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="76" height="41" rx="2" fill="none" stroke="#8ba0b833" stroke-width="0.8" stroke-dasharray="3 2"/>
+      <text x="40" y="25" text-anchor="middle" font-size="7" fill="#8ba0b844">empty</text>
+    </svg>`,
+    template: (logo) => `${logo}`
+  }
+];
+
+function detectLayout(slideEl) {
+  // Check most specific patterns first
+  for (const layout of SLIDE_LAYOUTS) {
+    if (layout.id === 'blank') continue;
+    if (layout.detect(slideEl)) return layout.id;
+  }
+  // Check if slide is essentially empty
+  if (!slideEl.children.length || (slideEl.children.length === 1 && slideEl.querySelector('img.slide-logo'))) {
+    return 'blank';
+  }
+  return null;
+}
+
+function extractContent(slideEl) {
+  const content = {};
+  // Simple text/html elements
+  const selectors = ['h1', 'h2', '.kicker', '.subtitle', '.statement', '.meta', '.highlight'];
+  selectors.forEach(sel => {
+    const el = slideEl.querySelector(sel);
+    if (el) {
+      content[sel] = { text: el.textContent.trim(), html: el.innerHTML.trim() };
+    }
+  });
+  // Kicker color
+  const kicker = slideEl.querySelector('.kicker');
+  if (kicker) {
+    content['_kickerColor'] = ['blue','warm','green','purple'].find(c => kicker.classList.contains(c)) || 'blue';
+  }
+  // Items
+  const items = slideEl.querySelectorAll('.items .item');
+  if (items.length) {
+    content['_items'] = Array.from(items).map(item => item.outerHTML);
+  }
+  // Stats
+  const stats = slideEl.querySelectorAll('.stat');
+  if (stats.length) {
+    content['_stats'] = Array.from(stats).map(s => s.outerHTML);
+  }
+  // Timeline phases
+  const phases = slideEl.querySelectorAll('.timeline-phase');
+  if (phases.length) {
+    content['_phases'] = Array.from(phases).map(p => p.outerHTML);
+  }
+  // Two-col
+  const twoCol = slideEl.querySelector('.two-col');
+  if (twoCol) {
+    content['_twocol'] = twoCol.innerHTML;
+  }
+  return content;
+}
+
+function applyLayout(layoutId) {
+  if (selectedSlide < 0) return;
+
+  const layout = SLIDE_LAYOUTS.find(l => l.id === layoutId);
+  if (!layout) return;
+
+  if (!confirm(`Apply "${layout.name}" layout? Content will be preserved where possible.`)) return;
+
+  // Parse current slide and extract content
+  const parser = new DOMParser();
+  const curDoc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const curSlide = curDoc.querySelector('.slide');
+  if (!curSlide) return;
+
+  const content = extractContent(curSlide);
+
+  // Build new slide HTML
+  const logoHtml = deckLogo ? `\n  <img class="slide-logo" src="${escAttr(deckLogo)}" alt="">` : '';
+  const dataSlide = curSlide.getAttribute('data-slide') || selectedSlide;
+  const isActive = curSlide.classList.contains('active');
+
+  const innerHtml = layout.template(logoHtml);
+  const newSlideHtml = `<div class="slide${isActive ? ' active' : ''}" data-slide="${dataSlide}">${innerHtml}\n</div>`;
+
+  // Parse the new slide and fill in preserved content
+  const newDoc = parser.parseFromString(newSlideHtml, 'text/html');
+  const newSlide = newDoc.querySelector('.slide');
+  if (!newSlide) return;
+
+  // Map content into new layout
+  // Headings: try direct match first, then cross-map h1<->h2
+  if (content['h1']) {
+    const h1 = newSlide.querySelector('h1');
+    if (h1) h1.textContent = content['h1'].text;
+    else {
+      const h2 = newSlide.querySelector('h2');
+      if (h2 && !content['h2']) h2.textContent = content['h1'].text;
+    }
+  }
+  if (content['h2']) {
+    const h2 = newSlide.querySelector('h2');
+    if (h2) h2.textContent = content['h2'].text;
+    else {
+      const h1 = newSlide.querySelector('h1');
+      if (h1 && !content['h1']) h1.textContent = content['h2'].text;
+    }
+  }
+
+  // Kicker
+  if (content['.kicker']) {
+    const kicker = newSlide.querySelector('.kicker');
+    if (kicker) {
+      kicker.textContent = content['.kicker'].text;
+      const color = content['_kickerColor'] || 'blue';
+      ['blue','warm','green','purple'].forEach(c => kicker.classList.remove(c));
+      kicker.classList.add(color);
+    }
+  }
+
+  // Subtitle
+  if (content['.subtitle']) {
+    const sub = newSlide.querySelector('.subtitle');
+    if (sub) sub.textContent = content['.subtitle'].text;
+  }
+
+  // Statement
+  if (content['.statement']) {
+    const st = newSlide.querySelector('.statement');
+    if (st) st.innerHTML = content['.statement'].html;
+  }
+
+  // Highlight
+  if (content['.highlight']) {
+    const hl = newSlide.querySelector('.highlight');
+    if (hl) hl.innerHTML = content['.highlight'].html;
+  }
+
+  // Items
+  if (content['_items'] && newSlide.querySelector('.items')) {
+    const itemsEl = newSlide.querySelector('.items');
+    itemsEl.innerHTML = content['_items'].join('\n');
+  }
+
+  // Stats
+  if (content['_stats'] && newSlide.querySelector('.stat-row, .stat')) {
+    const container = newSlide.querySelector('.stat-row') || newSlide;
+    const existingStats = container.querySelectorAll('.stat');
+    existingStats.forEach(s => s.remove());
+    content['_stats'].forEach(html => {
+      const tmp = parser.parseFromString(html, 'text/html');
+      const stat = tmp.querySelector('.stat');
+      if (stat) container.appendChild(stat);
+    });
+  }
+
+  // Timeline phases
+  if (content['_phases'] && newSlide.querySelector('.timeline')) {
+    const timeline = newSlide.querySelector('.timeline');
+    timeline.innerHTML = content['_phases'].join('\n');
+  }
+
+  // Two columns
+  if (content['_twocol'] && newSlide.querySelector('.two-col')) {
+    newSlide.querySelector('.two-col').innerHTML = content['_twocol'];
+  }
+
+  slides[selectedSlide] = newSlide.outerHTML;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function renderLayoutSelector(slideEl) {
+  const currentId = detectLayout(slideEl);
+  return SLIDE_LAYOUTS.map(layout => {
+    const isActive = layout.id === currentId;
+    return `<div class="layout-option ${isActive ? 'active' : ''}"
+                 onclick="applyLayout('${layout.id}')" title="${escAttr(layout.desc)}">
+      <div class="layout-preview">${layout.icon}</div>
+      <span class="layout-name">${escHtml(layout.name)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── Deck logo ───
+function setDeckLogo(url) {
+  deckLogo = url.trim();
+  markDirty();
+}
+
+function applyLogoToAll() {
+  slides = slides.map(s => {
+    const doc = new DOMParser().parseFromString(s, 'text/html');
+    const slide = doc.querySelector('.slide');
+    if (!slide) return s;
+    let logo = slide.querySelector('img.slide-logo');
+    if (deckLogo) {
+      if (!logo) {
+        logo = doc.createElement('img');
+        logo.className = 'slide-logo';
+        logo.alt = '';
+        slide.insertBefore(logo, slide.firstChild);
+      }
+      logo.src = deckLogo;
+    } else if (logo) {
+      logo.remove();
+    }
+    return slide.outerHTML;
+  });
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  toast(deckLogo ? 'Logo applied to all slides' : 'Logo removed from all slides');
+}
+
+function removeDeckLogo() {
+  deckLogo = '';
+  document.getElementById('deckLogoInput').value = '';
+  applyLogoToAll();
 }
 
 // ─── Editor ───
@@ -858,6 +1686,10 @@ function renderEditor() {
   if (!slide) { container.innerHTML = '<p>Could not parse slide</p>'; return; }
 
   let html = `<h3 style="margin-bottom:1rem;">Slide ${selectedSlide + 1}</h3>`;
+
+  // Layout selector
+  html += `<div class="section-header">Layout</div>`;
+  html += `<div class="layout-selector">${renderLayoutSelector(slide)}</div>`;
 
   // Detect and render editable elements
   const editables = findEditables(slide);
@@ -934,6 +1766,17 @@ function renderEditor() {
 
 function findEditables(slide) {
   const eds = [];
+
+  // Logo
+  const logo = slide.querySelector('img.slide-logo');
+  if (logo) {
+    eds.push({ type: 'text', label: 'Logo URL', selector: 'img.slide-logo', value: logo.getAttribute('src') || '',
+      apply: (el, val) => {
+        if (val) { el.setAttribute('src', val); }
+        else { el.remove(); }
+      }
+    });
+  }
 
   // Kicker
   const kicker = slide.querySelector('.kicker');
@@ -1243,8 +2086,15 @@ function escHtml(s) {
 }
 
 function escAttr(s) {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// ─── Unsaved changes guard ───
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) {
+    e.preventDefault();
+  }
+});
 
 // ─── Keyboard shortcuts ───
 document.addEventListener('keydown', (e) => {

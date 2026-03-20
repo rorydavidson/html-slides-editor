@@ -65,11 +65,77 @@ Every slide also exposes a raw HTML textarea as a fallback for anything not cove
 
 ## Features
 
-- **File browser** — navigate your filesystem and open any `.html` file
-- **Slide thumbnails** — visual sidebar showing all slides, with reorder (up/down), duplicate, and delete actions
-- **Live preview** — scaled preview of the active slide, toggleable
+### Slide layout editor
+
+Each slide has a layout selector at the top of its editor panel. Choose from 10 predefined layouts, each shown as an SVG wireframe thumbnail:
+
+| Layout | Description |
+|---|---|
+| Title Only | Large h1 with subtitle |
+| Kicker + Title | Section label, heading, and subtitle |
+| Statement | Large statement or quote text |
+| Card Grid | Heading with card items |
+| Two Columns | Heading with two content columns |
+| Statistics | Key figures with labels |
+| Timeline | Phases in a timeline grid |
+| Highlight Box | Heading with highlighted content box |
+| Blank | Empty slide for custom HTML |
+
+When you switch layouts, the editor preserves content where possible — headings, kicker text and colour, subtitles, items, stats, timeline phases, and two-column content are carried over to the new template. A confirmation dialog prevents accidental switches.
+
+### Color palettes
+
+Apply a colour palette to the entire deck. Eight built-in palettes are available:
+
+- **Ocean** — deep blue with teal accents
+- **Midnight** — dark purple with vibrant accents
+- **Forest** — deep green with natural tones
+- **Ember** — warm darks with fiery accents
+- **Light** — clean light background
+- **Charcoal** — neutral grey with vivid accents
+- **Corporate** — navy with classic blue
+- **Sunset** — warm gradient-inspired
+
+Click **Palette** in the toolbar to open the palette picker. The selected palette updates CSS custom properties across all slides.
+
+### Deck logo
+
+Add a logo to every slide in the deck:
+
+1. Enter the logo image URL in the toolbar input
+2. Click **Apply All** to add it to every slide
+3. Click **Remove** to strip logos from all slides
+
+The editor auto-detects an existing logo from the first slide when opening a file.
+
+### Slide management
+
+- **Add slide** — the **+ Slide** button adds a new slide with a default kicker + heading + subtitle layout
+- **Reorder** — move slides up or down using the arrow buttons on each thumbnail
+- **Duplicate** — copy a slide with all its content
+- **Delete** — remove a slide (with confirmation)
+
+### File operations
+
+- **New** — create a new deck from a built-in template with full presentation styling, keyboard navigation, progress bar, and animation support
+- **Open** — browse your filesystem and open any `.html` file
 - **Save / Save As** — write back to disk; unsaved changes are indicated in the toolbar
-- **Keyboard shortcuts** — `Cmd/Ctrl+S` to save, `Cmd/Ctrl+O` to open
+- **File browser** — navigate directories and select files visually
+
+### Live preview
+
+A scaled preview of the active slide is shown in the editor. Toggle it open or collapsed.
+
+### Print / export
+
+Click **Print** to open the deck in a new window formatted for printing — all slides rendered on separate landscape pages with UI elements hidden.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Cmd/Ctrl + S` | Save file |
+| `Cmd/Ctrl + O` | Open file |
 
 ## API
 
