@@ -385,6 +385,35 @@
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Palette swatches ── */
+  .palette-option {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .palette-option:hover { background: var(--surface-hover); }
+  .palette-swatches { display: flex; gap: 4px; }
+  .palette-swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.12);
+  }
+  .palette-name { font-size: 0.85rem; font-weight: 500; }
+  .palette-desc { font-size: 0.7rem; color: var(--text-dim); }
+
+  /* ── Print ── */
+  @media print {
+    .toolbar, .sidebar, .editor-panel, .modal-overlay, .toast,
+    #printContainer { display: none !important; }
+    body { overflow: visible; height: auto; background: white; }
+    .main { display: none !important; }
+  }
 </style>
 </head>
 <body>
@@ -393,10 +422,13 @@
 <div class="toolbar">
   <h1>Slides Editor</h1>
   <span class="filename" id="filename">No file open</span>
+  <button onclick="newDeck()">New</button>
   <button onclick="openFileModal()">Open</button>
   <button onclick="saveFile()" id="btnSave" disabled>Save</button>
   <button onclick="saveAsFile()" id="btnSaveAs" disabled>Save As</button>
   <button onclick="addSlide()" id="btnAdd" disabled>+ Slide</button>
+  <button onclick="printDeck()" id="btnPrint" disabled>Print</button>
+  <button onclick="openPaletteModal()" id="btnPalette" disabled>Palette</button>
   <span id="logoControls" style="display:none; margin-left:0.5rem; align-items:center; gap:0.4rem;">
     <label style="font-size:0.7rem; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em;">Logo:</label>
     <input type="text" id="deckLogoInput" style="width:160px; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:var(--radius); padding:0.3rem 0.5rem; font-size:0.75rem;" placeholder="logo-url.png" onchange="setDeckLogo(this.value)">
@@ -465,6 +497,17 @@
     <div style="margin-top:1rem; display:flex; gap:0.5rem; justify-content:flex-end;">
       <button onclick="closeSaveAsModal()">Cancel</button>
       <button class="primary" onclick="confirmSaveAs()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Palette modal -->
+<div class="modal-overlay hidden" id="paletteModal">
+  <div class="modal" style="min-width:500px;max-width:550px;">
+    <h2>Color Palette</h2>
+    <div id="paletteList" style="max-height:400px;overflow-y:auto;"></div>
+    <div style="margin-top:1rem; text-align:right;">
+      <button onclick="closePaletteModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -741,6 +784,8 @@ function updateUI() {
   document.getElementById('btnSave').disabled = !currentFile;
   document.getElementById('btnSaveAs').disabled = slides.length === 0;
   document.getElementById('btnAdd').disabled = slides.length === 0;
+  document.getElementById('btnPrint').disabled = slides.length === 0;
+  document.getElementById('btnPalette').disabled = slides.length === 0;
   document.getElementById('logoControls').style.display = currentFile ? 'inline-flex' : 'none';
   document.getElementById('deckLogoInput').value = deckLogo;
 }
@@ -896,6 +941,303 @@ function addSlide() {
   // Scroll to bottom of slide list
   const list = document.getElementById('slideList');
   list.scrollTop = list.scrollHeight;
+}
+
+// ─── New deck ───
+function newDeck() {
+  if (dirty && !confirm('You have unsaved changes. Create a new deck anyway?')) return;
+
+  const name = prompt('Filename for the new deck:', 'new-deck.html');
+  if (!name) return;
+
+  const filename = name.endsWith('.html') ? name : name + '.html';
+  let filePath = filename;
+  if (!filename.includes('/') && currentFile) {
+    const dir = currentFile.substring(0, currentFile.lastIndexOf('/'));
+    filePath = dir + '/' + filename;
+  }
+
+  currentFile = filePath;
+  rawHtml = buildNewDeckHtml('New Presentation');
+  parseSlides(rawHtml);
+  dirty = true;
+  updateUI();
+  toast('New deck created — save to write to disk');
+}
+
+function buildNewDeckHtml(title) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escHtml(title)}</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0c1520;
+    --surface: #132030;
+    --surface-light: #1a2940;
+    --text: #e8edf2;
+    --text-dim: #8ba0b8;
+    --accent: #3bb0d6;
+    --accent-warm: #f0944e;
+    --accent-green: #5cd9a0;
+    --accent-purple: #a78bfa;
+    --slide-max: 1100px;
+  }
+
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); overflow: hidden; height: 100vh; width: 100vw; }
+  .deck { position: relative; width: 100%; height: 100%; }
+  .slide {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    justify-content: center; padding: 5vh 7vw;
+    opacity: 0; transform: translateY(20px);
+    transition: opacity 0.55s ease, transform 0.55s ease;
+    pointer-events: none;
+  }
+  .slide.active { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .slide .anim { opacity: 0; transform: translateY(16px); transition: opacity 0.5s ease, transform 0.5s ease; }
+  .slide.active .anim { opacity: 1; transform: translateY(0); }
+
+  h1 { font-size: clamp(2.4rem, 5vw, 4.2rem); font-weight: 800; line-height: 1.1; }
+  h2 { font-size: clamp(1.6rem, 3vw, 2.6rem); font-weight: 700; line-height: 1.2; margin-bottom: 0.8rem; }
+  .subtitle { font-size: clamp(0.95rem, 1.6vw, 1.25rem); font-weight: 300; color: var(--text-dim); line-height: 1.65; max-width: 700px; }
+  .kicker { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 0.9rem; }
+  .kicker.blue { color: var(--accent); }
+  .kicker.warm { color: var(--accent-warm); }
+  .kicker.green { color: var(--accent-green); }
+  .kicker.purple { color: var(--accent-purple); }
+
+  .items { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; margin-top: 1.5rem; }
+  .item { background: var(--surface-light); border-radius: 12px; padding: 1.5rem; }
+  .item h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.5rem; }
+  .item p { font-size: 0.88rem; color: var(--text-dim); line-height: 1.55; }
+
+  .deck-progress { position: fixed; bottom: 0; left: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--accent-warm)); transition: width 0.4s ease; z-index: 100; }
+  .counter { position: fixed; bottom: 1.4rem; right: 1.8rem; font-size: 0.72rem; color: var(--text-dim); z-index: 100; opacity: 0.5; }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<div class="slide active" data-slide="0">
+  <h1 class="anim">${escHtml(title)}</h1>
+  <p class="subtitle anim">Add your subtitle here.</p>
+</div>
+
+</div>
+
+<div class="deck-progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = deck.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  const total = slides.length;
+  let current = 0;
+  function goTo(n) {
+    if (n < 0 || n >= total) return;
+    slides[current].classList.remove('active');
+    current = n;
+    slides[current].classList.add('active');
+    progress.style.width = ((current / (total - 1)) * 100) + '%';
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (['ArrowRight',' ','ArrowDown'].includes(e.key)) { e.preventDefault(); goTo(current+1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); goTo(current-1); }
+  });
+  goTo(0);
+<\/script>
+</body>
+</html>`;
+}
+
+// ─── Print to PDF ───
+function printDeck() {
+  if (!slides.length) return;
+  const printHtml = buildPrintHtml();
+
+  // Open the print-ready deck in a new window and trigger print
+  const win = window.open('', '_blank');
+  if (!win) { toast('Pop-up blocked — please allow pop-ups for this site', true); return; }
+  win.document.write(printHtml);
+  win.document.close();
+  win.onload = () => {
+    win.focus();
+    win.print();
+  };
+}
+
+function buildPrintHtml() {
+  const printOverrides = `
+    @page { size: landscape; margin: 0; }
+    @media print { @page { size: landscape; margin: 0; } }
+    html, body { overflow: visible; height: auto; margin: 0; padding: 0; }
+    body { background: var(--bg, #0c1520); }
+    .deck { position: static; width: auto; height: auto; overflow: visible; }
+    .slide {
+      position: relative !important;
+      opacity: 1 !important;
+      transform: none !important;
+      pointer-events: auto !important;
+      width: 100vw;
+      height: 100vh;
+      page-break-after: always;
+      break-after: page;
+      display: flex !important;
+      flex-direction: column;
+      justify-content: center;
+      padding: 5vh 7vw;
+      overflow: hidden;
+    }
+    .slide:last-child { page-break-after: auto; break-after: auto; }
+    .slide .anim { opacity: 1 !important; transform: none !important; }
+    .deck-progress, .counter { display: none !important; }
+  `;
+
+  let html = '<!DOCTYPE html><html><head>\n';
+  html += headContent;
+  html += '<style>\n' + styleContent + '\n' + printOverrides + '\n</style>\n';
+  extraStyles.forEach(s => { html += s + '\n'; });
+  html += '</head><body>\n<div class="deck">\n';
+  slides.forEach(s => {
+    html += s.replace(/class="slide([^"]*)"/, 'class="slide$1 active"') + '\n';
+  });
+  html += '</div>\n</body></html>';
+  return html;
+}
+
+// ─── Color palette ───
+const PALETTES = [
+  {
+    name: 'Ocean',
+    desc: 'Deep blue tones with teal accent',
+    vars: {
+      '--bg': '#0c1520', '--surface': '#132030', '--surface-light': '#1a2940',
+      '--text': '#e8edf2', '--text-dim': '#8ba0b8',
+      '--accent': '#3bb0d6', '--accent-warm': '#f0944e',
+      '--accent-green': '#5cd9a0', '--accent-purple': '#a78bfa'
+    }
+  },
+  {
+    name: 'Midnight',
+    desc: 'Dark purple with vibrant accents',
+    vars: {
+      '--bg': '#0f0f1a', '--surface': '#1a1a2e', '--surface-light': '#25253f',
+      '--text': '#e0e0f0', '--text-dim': '#8888aa',
+      '--accent': '#6c63ff', '--accent-warm': '#ff6b6b',
+      '--accent-green': '#51cf66', '--accent-purple': '#cc5de8'
+    }
+  },
+  {
+    name: 'Forest',
+    desc: 'Deep green with natural tones',
+    vars: {
+      '--bg': '#0a1a14', '--surface': '#12261c', '--surface-light': '#1a3326',
+      '--text': '#e0f0e8', '--text-dim': '#88aa96',
+      '--accent': '#4ecdc4', '--accent-warm': '#f7b731',
+      '--accent-green': '#26de81', '--accent-purple': '#a78bfa'
+    }
+  },
+  {
+    name: 'Ember',
+    desc: 'Warm darks with fiery accents',
+    vars: {
+      '--bg': '#1a0e0e', '--surface': '#2a1515', '--surface-light': '#3a2020',
+      '--text': '#f0e0e0', '--text-dim': '#aa8888',
+      '--accent': '#ff6348', '--accent-warm': '#ffa502',
+      '--accent-green': '#7bed9f', '--accent-purple': '#cf6a87'
+    }
+  },
+  {
+    name: 'Light',
+    desc: 'Clean light background, dark text',
+    vars: {
+      '--bg': '#f5f5f5', '--surface': '#ffffff', '--surface-light': '#e8e8e8',
+      '--text': '#1a1a2e', '--text-dim': '#666680',
+      '--accent': '#2563eb', '--accent-warm': '#ea580c',
+      '--accent-green': '#16a34a', '--accent-purple': '#9333ea'
+    }
+  },
+  {
+    name: 'Charcoal',
+    desc: 'Neutral grey with vivid accents',
+    vars: {
+      '--bg': '#1c1c1c', '--surface': '#2a2a2a', '--surface-light': '#383838',
+      '--text': '#eeeeee', '--text-dim': '#999999',
+      '--accent': '#00b4d8', '--accent-warm': '#fb8500',
+      '--accent-green': '#06d6a0', '--accent-purple': '#8338ec'
+    }
+  },
+  {
+    name: 'Corporate',
+    desc: 'Navy with classic blue accent',
+    vars: {
+      '--bg': '#0b1929', '--surface': '#112240', '--surface-light': '#1a3050',
+      '--text': '#e6f1ff', '--text-dim': '#8892b0',
+      '--accent': '#2196f3', '--accent-warm': '#ff9800',
+      '--accent-green': '#4caf50', '--accent-purple': '#7c4dff'
+    }
+  },
+  {
+    name: 'Sunset',
+    desc: 'Warm gradient-inspired palette',
+    vars: {
+      '--bg': '#1a1019', '--surface': '#2a1828', '--surface-light': '#3a2238',
+      '--text': '#f0e6ee', '--text-dim': '#aa88a6',
+      '--accent': '#f06292', '--accent-warm': '#ffab40',
+      '--accent-green': '#69f0ae', '--accent-purple': '#b388ff'
+    }
+  }
+];
+
+function openPaletteModal() {
+  document.getElementById('paletteModal').classList.remove('hidden');
+  renderPaletteList();
+}
+
+function closePaletteModal() {
+  document.getElementById('paletteModal').classList.add('hidden');
+}
+
+function renderPaletteList() {
+  const list = document.getElementById('paletteList');
+  list.innerHTML = PALETTES.map((p, i) => {
+    const swatchKeys = ['--bg', '--accent', '--accent-warm', '--accent-green', '--accent-purple'];
+    const swatches = swatchKeys
+      .map(key => p.vars[key] ? `<div class="palette-swatch" style="background:${p.vars[key]}"></div>` : '')
+      .join('');
+    return `<div class="palette-option" onclick="applyPalette(${i})">
+      <div class="palette-swatches">${swatches}</div>
+      <div>
+        <div class="palette-name">${escHtml(p.name)}</div>
+        <div class="palette-desc">${escHtml(p.desc)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function applyPalette(index) {
+  const palette = PALETTES[index];
+  for (const [prop, value] of Object.entries(palette.vars)) {
+    const regex = new RegExp(
+      '(' + prop.replace(/-/g, '\\-') + '\\s*:\\s*)([^;\\n}]+)',
+      'g'
+    );
+    styleContent = styleContent.replace(regex, '$1' + value);
+  }
+  markDirty();
+  closePaletteModal();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+  toast('Applied palette: ' + palette.name);
 }
 
 // ─── Deck logo ───
