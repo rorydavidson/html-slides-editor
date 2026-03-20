@@ -407,6 +407,39 @@
   .palette-name { font-size: 0.85rem; font-weight: 500; }
   .palette-desc { font-size: 0.7rem; color: var(--text-dim); }
 
+  /* ── Layout selector ── */
+  .layout-selector {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    padding-bottom: 0.8rem;
+    margin-bottom: 1.2rem;
+  }
+  .layout-option {
+    flex-shrink: 0;
+    width: 100px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    padding: 0.4rem;
+    transition: border-color 0.15s, background 0.15s;
+    text-align: center;
+  }
+  .layout-option:hover { border-color: var(--border); background: var(--surface-hover); }
+  .layout-option.active { border-color: var(--accent); background: var(--surface-hover); }
+  .layout-preview {
+    aspect-ratio: 16/9;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.3rem;
+  }
+  .layout-preview svg { width: 100%; height: 100%; }
+  .layout-name { font-size: 0.62rem; font-weight: 600; color: var(--text-dim); line-height: 1.2; }
+
   /* ── Print ── */
   @media print {
     .toolbar, .sidebar, .editor-panel, .modal-overlay, .toast,
@@ -1240,6 +1273,361 @@ function applyPalette(index) {
   toast('Applied palette: ' + palette.name);
 }
 
+// ─── Slide layouts ───
+const SLIDE_LAYOUTS = [
+  {
+    id: 'title-only',
+    name: 'Title Only',
+    desc: 'Large title with subtitle',
+    detect: (el) => el.querySelector('h1') && !el.querySelector('h2') && !el.querySelector('.items'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="12" width="44" height="6" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="22" width="56" height="3" rx="1" fill="#8ba0b844"/>
+      <rect x="8" y="28" width="40" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <h1 class="anim">Title</h1>
+  <p class="subtitle anim">Subtitle text here.</p>`
+  },
+  {
+    id: 'title-subtitle',
+    name: 'Kicker + Title',
+    desc: 'Kicker label, heading, and subtitle',
+    detect: (el) => el.querySelector('.kicker') && el.querySelector('h2') && !el.querySelector('.items') && !el.querySelector('.timeline') && !el.querySelector('.stat') && !el.querySelector('.highlight'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="8" width="18" height="3" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="15" width="40" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="24" width="52" height="3" rx="1" fill="#8ba0b844"/>
+      <rect x="8" y="30" width="38" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <p class="subtitle anim">Subtitle text here.</p>`
+  },
+  {
+    id: 'section-break',
+    name: 'Statement',
+    desc: 'Large statement or quote text',
+    detect: (el) => !!el.querySelector('.statement'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="10" width="64" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="18" width="58" height="5" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="26" width="48" height="5" rx="1" fill="#8ba0b8"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="statement anim">Your statement or key message goes here. Make it bold and impactful.</p>`
+  },
+  {
+    id: 'card-grid',
+    name: 'Card Grid',
+    desc: 'Heading with card items',
+    detect: (el) => !!el.querySelector('.items'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="4" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="29" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="54" y="17" width="23" height="22" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <div class="items">
+    <div class="item anim"><h3>Item One</h3><p>Description for the first item.</p></div>
+    <div class="item anim"><h3>Item Two</h3><p>Description for the second item.</p></div>
+    <div class="item anim"><h3>Item Three</h3><p>Description for the third item.</p></div>
+  </div>`
+  },
+  {
+    id: 'two-columns',
+    name: 'Two Columns',
+    desc: 'Heading with two content columns',
+    detect: (el) => !!el.querySelector('.two-col'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="4" y="17" width="35" height="24" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="42" y="17" width="35" height="24" rx="2" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin-top:1.5rem;">
+    <div class="anim"><p>Left column content goes here.</p></div>
+    <div class="anim"><p>Right column content goes here.</p></div>
+  </div>`
+  },
+  {
+    id: 'stats',
+    name: 'Statistics',
+    desc: 'Key figures with labels',
+    detect: (el) => el.querySelectorAll('.stat').length > 0,
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <text x="14" y="30" font-size="10" fill="#3bb0d6" font-weight="bold">42</text>
+      <text x="38" y="30" font-size="10" fill="#f0944e" font-weight="bold">87</text>
+      <text x="60" y="30" font-size="10" fill="#5cd9a0" font-weight="bold">5K</text>
+      <rect x="8" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+      <rect x="33" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+      <rect x="56" y="34" width="18" height="2" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Key Figures</h2>
+  <div class="stat-row" style="display:flex;gap:3rem;margin-top:2rem;">
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent);">100</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric One</div></div>
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent-warm);">250</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric Two</div></div>
+    <div class="stat anim"><div class="stat-num" style="font-size:2.8rem;font-weight:800;color:var(--accent-green);">5K</div><div class="stat-label" style="font-size:0.85rem;color:var(--text-dim);">Metric Three</div></div>
+  </div>`
+  },
+  {
+    id: 'timeline',
+    name: 'Timeline',
+    desc: 'Phases arranged in a timeline',
+    detect: (el) => !!el.querySelector('.timeline'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <line x1="8" y1="20" x2="72" y2="20" stroke="#8ba0b844" stroke-width="1"/>
+      <circle cx="16" cy="20" r="2.5" fill="#3bb0d6"/>
+      <circle cx="40" cy="20" r="2.5" fill="#f0944e"/>
+      <circle cx="64" cy="20" r="2.5" fill="#5cd9a0"/>
+      <rect x="8" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="32" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+      <rect x="56" y="25" width="18" height="12" rx="1.5" fill="#1a294066" stroke="#8ba0b844" stroke-width="0.5"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Timeline</h2>
+  <div class="timeline" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:2rem;">
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent);margin-bottom:0.5rem;">Phase 1</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">First Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of first phase.</p>
+    </div>
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent-warm);margin-bottom:0.5rem;">Phase 2</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">Second Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of second phase.</p>
+    </div>
+    <div class="timeline-phase anim">
+      <p class="y-label" style="font-size:0.75rem;font-weight:600;color:var(--accent-green);margin-bottom:0.5rem;">Phase 3</p>
+      <h3 style="font-size:1rem;margin-bottom:0.4rem;">Third Phase</h3>
+      <p style="font-size:0.85rem;color:var(--text-dim);">Description of third phase.</p>
+    </div>
+  </div>`
+  },
+  {
+    id: 'highlight',
+    name: 'Highlight Box',
+    desc: 'Heading with highlighted content box',
+    detect: (el) => !!el.querySelector('.highlight'),
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="14" height="2.5" rx="1" fill="#3bb0d6"/>
+      <rect x="8" y="9" width="30" height="4" rx="1" fill="#8ba0b8"/>
+      <rect x="8" y="18" width="64" height="20" rx="3" fill="#3bb0d620" stroke="#3bb0d6" stroke-width="0.8"/>
+      <rect x="14" y="23" width="36" height="3" rx="1" fill="#8ba0b8"/>
+      <rect x="14" y="29" width="28" height="3" rx="1" fill="#8ba0b844"/>
+    </svg>`,
+    template: (logo) => `${logo}
+  <p class="kicker blue anim">Section</p>
+  <h2 class="anim">Heading</h2>
+  <p class="subtitle anim">Supporting text goes here.</p>
+  <div class="highlight anim" style="background:var(--surface-light);border-radius:12px;padding:1.5rem;margin-top:1.5rem;">
+    <p>Highlighted content goes here. This box draws attention to key information.</p>
+  </div>`
+  },
+  {
+    id: 'blank',
+    name: 'Blank',
+    desc: 'Empty slide for custom content',
+    detect: () => false,
+    icon: `<svg viewBox="0 0 80 45" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="76" height="41" rx="2" fill="none" stroke="#8ba0b833" stroke-width="0.8" stroke-dasharray="3 2"/>
+      <text x="40" y="25" text-anchor="middle" font-size="7" fill="#8ba0b844">empty</text>
+    </svg>`,
+    template: (logo) => `${logo}`
+  }
+];
+
+function detectLayout(slideEl) {
+  // Check most specific patterns first
+  for (const layout of SLIDE_LAYOUTS) {
+    if (layout.id === 'blank') continue;
+    if (layout.detect(slideEl)) return layout.id;
+  }
+  // Check if slide is essentially empty
+  if (!slideEl.children.length || (slideEl.children.length === 1 && slideEl.querySelector('img.slide-logo'))) {
+    return 'blank';
+  }
+  return null;
+}
+
+function extractContent(slideEl) {
+  const content = {};
+  // Simple text/html elements
+  const selectors = ['h1', 'h2', '.kicker', '.subtitle', '.statement', '.meta', '.highlight'];
+  selectors.forEach(sel => {
+    const el = slideEl.querySelector(sel);
+    if (el) {
+      content[sel] = { text: el.textContent.trim(), html: el.innerHTML.trim() };
+    }
+  });
+  // Kicker color
+  const kicker = slideEl.querySelector('.kicker');
+  if (kicker) {
+    content['_kickerColor'] = ['blue','warm','green','purple'].find(c => kicker.classList.contains(c)) || 'blue';
+  }
+  // Items
+  const items = slideEl.querySelectorAll('.items .item');
+  if (items.length) {
+    content['_items'] = Array.from(items).map(item => item.outerHTML);
+  }
+  // Stats
+  const stats = slideEl.querySelectorAll('.stat');
+  if (stats.length) {
+    content['_stats'] = Array.from(stats).map(s => s.outerHTML);
+  }
+  // Timeline phases
+  const phases = slideEl.querySelectorAll('.timeline-phase');
+  if (phases.length) {
+    content['_phases'] = Array.from(phases).map(p => p.outerHTML);
+  }
+  // Two-col
+  const twoCol = slideEl.querySelector('.two-col');
+  if (twoCol) {
+    content['_twocol'] = twoCol.innerHTML;
+  }
+  return content;
+}
+
+function applyLayout(layoutId) {
+  if (selectedSlide < 0) return;
+
+  const layout = SLIDE_LAYOUTS.find(l => l.id === layoutId);
+  if (!layout) return;
+
+  if (!confirm(`Apply "${layout.name}" layout? Content will be preserved where possible.`)) return;
+
+  // Parse current slide and extract content
+  const parser = new DOMParser();
+  const curDoc = parser.parseFromString(slides[selectedSlide], 'text/html');
+  const curSlide = curDoc.querySelector('.slide');
+  if (!curSlide) return;
+
+  const content = extractContent(curSlide);
+
+  // Build new slide HTML
+  const logoHtml = deckLogo ? `\n  <img class="slide-logo" src="${escAttr(deckLogo)}" alt="">` : '';
+  const dataSlide = curSlide.getAttribute('data-slide') || selectedSlide;
+  const isActive = curSlide.classList.contains('active');
+
+  const innerHtml = layout.template(logoHtml);
+  const newSlideHtml = `<div class="slide${isActive ? ' active' : ''}" data-slide="${dataSlide}">${innerHtml}\n</div>`;
+
+  // Parse the new slide and fill in preserved content
+  const newDoc = parser.parseFromString(newSlideHtml, 'text/html');
+  const newSlide = newDoc.querySelector('.slide');
+  if (!newSlide) return;
+
+  // Map content into new layout
+  // Headings: try direct match first, then cross-map h1<->h2
+  if (content['h1']) {
+    const h1 = newSlide.querySelector('h1');
+    if (h1) h1.textContent = content['h1'].text;
+    else {
+      const h2 = newSlide.querySelector('h2');
+      if (h2 && !content['h2']) h2.textContent = content['h1'].text;
+    }
+  }
+  if (content['h2']) {
+    const h2 = newSlide.querySelector('h2');
+    if (h2) h2.textContent = content['h2'].text;
+    else {
+      const h1 = newSlide.querySelector('h1');
+      if (h1 && !content['h1']) h1.textContent = content['h2'].text;
+    }
+  }
+
+  // Kicker
+  if (content['.kicker']) {
+    const kicker = newSlide.querySelector('.kicker');
+    if (kicker) {
+      kicker.textContent = content['.kicker'].text;
+      const color = content['_kickerColor'] || 'blue';
+      ['blue','warm','green','purple'].forEach(c => kicker.classList.remove(c));
+      kicker.classList.add(color);
+    }
+  }
+
+  // Subtitle
+  if (content['.subtitle']) {
+    const sub = newSlide.querySelector('.subtitle');
+    if (sub) sub.textContent = content['.subtitle'].text;
+  }
+
+  // Statement
+  if (content['.statement']) {
+    const st = newSlide.querySelector('.statement');
+    if (st) st.innerHTML = content['.statement'].html;
+  }
+
+  // Highlight
+  if (content['.highlight']) {
+    const hl = newSlide.querySelector('.highlight');
+    if (hl) hl.innerHTML = content['.highlight'].html;
+  }
+
+  // Items
+  if (content['_items'] && newSlide.querySelector('.items')) {
+    const itemsEl = newSlide.querySelector('.items');
+    itemsEl.innerHTML = content['_items'].join('\n');
+  }
+
+  // Stats
+  if (content['_stats'] && newSlide.querySelector('.stat-row, .stat')) {
+    const container = newSlide.querySelector('.stat-row') || newSlide;
+    const existingStats = container.querySelectorAll('.stat');
+    existingStats.forEach(s => s.remove());
+    content['_stats'].forEach(html => {
+      const tmp = parser.parseFromString(html, 'text/html');
+      const stat = tmp.querySelector('.stat');
+      if (stat) container.appendChild(stat);
+    });
+  }
+
+  // Timeline phases
+  if (content['_phases'] && newSlide.querySelector('.timeline')) {
+    const timeline = newSlide.querySelector('.timeline');
+    timeline.innerHTML = content['_phases'].join('\n');
+  }
+
+  // Two columns
+  if (content['_twocol'] && newSlide.querySelector('.two-col')) {
+    newSlide.querySelector('.two-col').innerHTML = content['_twocol'];
+  }
+
+  slides[selectedSlide] = newSlide.outerHTML;
+  markDirty();
+  renderSlideList();
+  renderEditor();
+  updatePreview();
+}
+
+function renderLayoutSelector(slideEl) {
+  const currentId = detectLayout(slideEl);
+  return SLIDE_LAYOUTS.map(layout => {
+    const isActive = layout.id === currentId;
+    return `<div class="layout-option ${isActive ? 'active' : ''}"
+                 onclick="applyLayout('${layout.id}')" title="${escAttr(layout.desc)}">
+      <div class="layout-preview">${layout.icon}</div>
+      <span class="layout-name">${escHtml(layout.name)}</span>
+    </div>`;
+  }).join('');
+}
+
 // ─── Deck logo ───
 function setDeckLogo(url) {
   deckLogo = url.trim();
@@ -1298,6 +1686,10 @@ function renderEditor() {
   if (!slide) { container.innerHTML = '<p>Could not parse slide</p>'; return; }
 
   let html = `<h3 style="margin-bottom:1rem;">Slide ${selectedSlide + 1}</h3>`;
+
+  // Layout selector
+  html += `<div class="section-header">Layout</div>`;
+  html += `<div class="layout-selector">${renderLayoutSelector(slide)}</div>`;
 
   // Detect and render editable elements
   const editables = findEditables(slide);
